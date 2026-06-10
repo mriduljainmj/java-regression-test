@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 3
 MAX_CONTEXT_CHARS = 10000  # guardrail for very large diffs/sources
-MODEL = "google/gemini-2.5-flash-lite"
+MODEL = "google/gemma-4-26b-a4b-it:free"
 
 JAVA_SOURCE_MARKER = "src/main/java"
 FEATURES_DIR_MARKER = "src/test/resources/features"
