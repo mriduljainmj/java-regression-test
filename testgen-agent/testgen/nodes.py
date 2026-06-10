@@ -15,7 +15,7 @@ from .state import GenerationResult, TestGenState
 
 logger = logging.getLogger(__name__)
 
-MODEL = "openai/gpt-4o-mini"
+MODEL = "mistralai/mistral-7b-instruct:free"
 MAX_ATTEMPTS = 3
 MAX_CONTEXT_CHARS = 30000  # guardrail for very large diffs/sources
 
