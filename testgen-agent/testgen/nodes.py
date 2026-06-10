@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 import os
-import google.generativeai as genai
+from google import genai
 import json
 
 
@@ -15,7 +15,7 @@ from .state import GenerationResult, TestGenState
 
 logger = logging.getLogger(__name__)
 
-MODEL = "gemini-1.5-flash"
+MODEL = "gemini-2.0-flash"
 MAX_ATTEMPTS = 3
 MAX_CONTEXT_CHARS = 200_000  # guardrail for very large diffs/sources
 
@@ -99,10 +99,9 @@ def gather_context(state: TestGenState) -> TestGenState:
 
 
 
-def generate_tests(state: TestGenState) -> TestGenState:
-    """Call Gemini to produce structured test-generation result."""
 
-    model = configure_google_api()
+def generate_tests(state: TestGenState) -> TestGenState:
+    client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 
     user_prompt = USER_PROMPT_TEMPLATE.format(
         target_component_context=state["target_component_context"],
@@ -121,7 +120,7 @@ def generate_tests(state: TestGenState) -> TestGenState:
     {user_prompt}
 
     IMPORTANT:
-    Return output strictly as valid JSON matching this schema:
+    Return ONLY valid JSON in this format:
     {{
     "analysis_summary": "string",
     "impacted_endpoints": ["string"],
@@ -135,23 +134,21 @@ def generate_tests(state: TestGenState) -> TestGenState:
     }}
     """
 
-    response = model.generate_content(full_prompt)
+    response = client.models.generate_content(
+        model=MODEL,
+        contents=full_prompt,
+    )
 
-    # Gemini returns text → we parse JSON manually
     raw_text = response.text.strip()
 
-    try:
-        parsed = json.loads(raw_text)
-    except Exception:
-        raise ValueError(f"Gemini output is not valid JSON:\n{raw_text}")
+    # Safer JSON extraction
+    import re
+    match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+    if not match:
+        raise ValueError(f"No JSON found in response:\n{raw_text}")
 
+    parsed = json.loads(match.group(0))
     generation = GenerationResult(**parsed)
-
-    logger.info(
-        "Generated %d feature file(s) for endpoints: %s",
-        len(generation.new_or_modified_features),
-        ", ".join(generation.impacted_endpoints) or "(none)",
-    )
 
     return {
         "generation": generation,
