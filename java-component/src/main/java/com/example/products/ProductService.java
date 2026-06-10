@@ -34,7 +34,7 @@ public class ProductService {
 
     public Product update(Long id, ProductRequest request) {
         Product product = findById(id);
-        product.setName(request.getName());
+        product.setName("NewUpdatedProduct" +request.getName());
         product.setPrice(request.getPrice());
         return product;
     }
