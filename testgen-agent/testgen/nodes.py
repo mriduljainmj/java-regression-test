@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 import os
-from google import genai
+import openai
 import json
 
 
@@ -15,9 +15,9 @@ from .state import GenerationResult, TestGenState
 
 logger = logging.getLogger(__name__)
 
-MODEL = "gemini-2.0-flash-lite"
+MODEL = "openai/gpt-4o-mini"
 MAX_ATTEMPTS = 3
-MAX_CONTEXT_CHARS = 15000  # guardrail for very large diffs/sources
+MAX_CONTEXT_CHARS = 30000  # guardrail for very large diffs/sources
 
 JAVA_SOURCE_MARKER = "src/main/java"
 FEATURES_DIR_MARKER = "src/test/resources/features"
@@ -100,8 +100,16 @@ def gather_context(state: TestGenState) -> TestGenState:
 
 
 
+
 def generate_tests(state: TestGenState) -> TestGenState:
-    client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
+    client = OpenAI(
+        api_key=os.environ["OPENROUTER_API_KEY"],
+        base_url="https://openrouter.ai/api/v1",
+        default_headers={
+        "HTTP-Referer": "your-app",
+        "X-Title": "testgen-agent"
+        }
+    )
 
     user_prompt = USER_PROMPT_TEMPLATE.format(
         target_component_context=state["target_component_context"],
@@ -134,18 +142,25 @@ def generate_tests(state: TestGenState) -> TestGenState:
     }}
     """
 
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=full_prompt,
-    )
+    
+    for i in range(3):
+        try:
+            response = client.chat.completions.create(
+                model=MODEL,
+                messages=[{"role": "user", "content": full_prompt}],
+                temperature=0,
+            )
+            break
+        except Exception:
+            time.sleep(2)
 
-    raw_text = response.text.strip()
 
-    # Safer JSON extraction
-    import re
+    raw_text = response.choices[0].message.content.strip()
+
+    # Extract JSON safely
     match = re.search(r"\{.*\}", raw_text, re.DOTALL)
     if not match:
-        raise ValueError(f"No JSON found in response:\n{raw_text}")
+        raise ValueError(f"No JSON found:\n{raw_text}")
 
     parsed = json.loads(match.group(0))
     generation = GenerationResult(**parsed)
@@ -154,6 +169,7 @@ def generate_tests(state: TestGenState) -> TestGenState:
         "generation": generation,
         "attempts": state.get("attempts", 0) + 1
     }
+
 
 
 
