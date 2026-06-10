@@ -15,9 +15,9 @@ from .state import GenerationResult, TestGenState
 
 logger = logging.getLogger(__name__)
 
-MODEL = "gemini-2.0-flash"
+MODEL = "gemini-2.0-flash-lite"
 MAX_ATTEMPTS = 3
-MAX_CONTEXT_CHARS = 200_000  # guardrail for very large diffs/sources
+MAX_CONTEXT_CHARS = 15000  # guardrail for very large diffs/sources
 
 JAVA_SOURCE_MARKER = "src/main/java"
 FEATURES_DIR_MARKER = "src/test/resources/features"
