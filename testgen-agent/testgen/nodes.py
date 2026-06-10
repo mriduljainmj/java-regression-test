@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 import os
-import openai
+import openai import OpenAI
 import json
 
 
