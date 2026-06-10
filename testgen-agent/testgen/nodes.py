@@ -15,7 +15,6 @@ from .state import GenerationResult, TestGenState
 
 logger = logging.getLogger(__name__)
 
-MODEL = "mistralai/mistral-7b-instruct:free"
 MAX_ATTEMPTS = 3
 MAX_CONTEXT_CHARS = 30000  # guardrail for very large diffs/sources
 
@@ -140,10 +139,16 @@ def generate_tests(state: TestGenState) -> TestGenState:
         }}
     ]
     }}
-    """
-
+    """   
+    response = None  # ✅ prevent crash
     
-    for i in range(3):
+    MODELS = [
+        "openai/gpt-4o-mini",
+        "mistralai/mistral-7b-instruct",
+    ]
+
+
+    for attempt in range(3):
         try:
             response = client.chat.completions.create(
                 model=MODEL,
@@ -151,9 +156,21 @@ def generate_tests(state: TestGenState) -> TestGenState:
                 temperature=0,
             )
             break
-        except Exception:
+
+        except Exception as e:
+            print(f"Attempt {attempt+1} failed: {e}")
+
+            if "402" in str(e):
+                raise RuntimeError("OpenRouter billing required")
+
+            if "404" in str(e):
+                raise RuntimeError(f"Model not found: {MODEL}")
+
             time.sleep(2)
 
+    # ✅ FINAL SAFETY CHECK
+    if response is None:
+        raise RuntimeError("All retries failed. No response from model.")
 
     raw_text = response.choices[0].message.content.strip()
 
