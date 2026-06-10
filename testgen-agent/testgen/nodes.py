@@ -5,19 +5,31 @@ import subprocess
 import time
 from pathlib import Path
 
-import anthropic
+import os
+import google.generativeai as genai
+import json
+
 
 from .prompts import RETRY_SUFFIX_TEMPLATE, SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 from .state import GenerationResult, TestGenState
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-opus-4-8"
+MODEL = "gemini-1.5-flash"
 MAX_ATTEMPTS = 3
 MAX_CONTEXT_CHARS = 200_000  # guardrail for very large diffs/sources
 
 JAVA_SOURCE_MARKER = "src/main/java"
 FEATURES_DIR_MARKER = "src/test/resources/features"
+
+
+def configure_google_api():
+    """Configure and return the Google Generative AI model."""
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError("GOOGLE_API_KEY environment variable not set")
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel(MODEL)
 
 
 def _run(cmd: list[str], cwd: str) -> str:
@@ -86,9 +98,11 @@ def gather_context(state: TestGenState) -> TestGenState:
     }
 
 
+
 def generate_tests(state: TestGenState) -> TestGenState:
-    """Call Claude to produce the structured test-generation result."""
-    client = anthropic.Anthropic()
+    """Call Gemini to produce structured test-generation result."""
+
+    model = configure_google_api()
 
     user_prompt = USER_PROMPT_TEMPLATE.format(
         target_component_context=state["target_component_context"],
@@ -96,32 +110,54 @@ def generate_tests(state: TestGenState) -> TestGenState:
         existing_feature_examples=state["existing_feature_examples"],
         api_spec=state["api_spec"],
     )
+
     if state.get("validation_errors"):
         errors = "\n".join(f"- {e}" for e in state["validation_errors"])
         user_prompt += RETRY_SUFFIX_TEMPLATE.format(errors=errors)
 
-    response = client.messages.parse(
-        model=MODEL,
-        max_tokens=16000,
-        thinking={"type": "adaptive"},
-        system=[
-            {
-                "type": "text",
-                "text": SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[{"role": "user", "content": user_prompt}],
-        output_format=GenerationResult,
-    )
+    full_prompt = f"""
+    {SYSTEM_PROMPT}
 
-    generation: GenerationResult = response.parsed_output
+    {user_prompt}
+
+    IMPORTANT:
+    Return output strictly as valid JSON matching this schema:
+    {{
+    "analysis_summary": "string",
+    "impacted_endpoints": ["string"],
+    "new_or_modified_features": [
+        {{
+        "file_name": "string",
+        "action": "CREATE or UPDATE",
+        "gherkin_content": "string"
+        }}
+    ]
+    }}
+    """
+
+    response = model.generate_content(full_prompt)
+
+    # Gemini returns text → we parse JSON manually
+    raw_text = response.text.strip()
+
+    try:
+        parsed = json.loads(raw_text)
+    except Exception:
+        raise ValueError(f"Gemini output is not valid JSON:\n{raw_text}")
+
+    generation = GenerationResult(**parsed)
+
     logger.info(
         "Generated %d feature file(s) for endpoints: %s",
         len(generation.new_or_modified_features),
         ", ".join(generation.impacted_endpoints) or "(none)",
     )
-    return {"generation": generation, "attempts": state.get("attempts", 0) + 1}
+
+    return {
+        "generation": generation,
+        "attempts": state.get("attempts", 0) + 1
+    }
+
 
 
 def validate_output(state: TestGenState) -> TestGenState:
