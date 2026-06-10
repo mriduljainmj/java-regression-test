@@ -1,5 +1,4 @@
 from .nodes import (
-    configure_google_api,
     collect_diff,
     gather_context,
     generate_tests,
@@ -12,7 +11,6 @@ from .graph import build_graph
 from .state import TestGenState
 
 __all__ = [
-    "configure_google_api",
     "collect_diff",
     "gather_context",
     "generate_tests",

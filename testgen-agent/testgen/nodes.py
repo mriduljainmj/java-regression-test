@@ -16,19 +16,11 @@ from .state import GenerationResult, TestGenState
 logger = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 3
-MAX_CONTEXT_CHARS = 30000  # guardrail for very large diffs/sources
+MAX_CONTEXT_CHARS = 10000  # guardrail for very large diffs/sources
+MODEL = "google/gemini-2.5-flash-lite"
 
 JAVA_SOURCE_MARKER = "src/main/java"
 FEATURES_DIR_MARKER = "src/test/resources/features"
-
-
-def configure_google_api():
-    """Configure and return the Google Generative AI model."""
-    api_key = os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        raise ValueError("GOOGLE_API_KEY environment variable not set")
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel(MODEL)
 
 
 def _run(cmd: list[str], cwd: str) -> str:
@@ -141,8 +133,6 @@ def generate_tests(state: TestGenState) -> TestGenState:
     }}
     """   
     response = None  # ✅ prevent crash
-    
-    MODEL = "mistralai/mistral-7b-instruct"
 
 
     for attempt in range(3):
