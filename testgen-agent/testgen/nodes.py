@@ -142,10 +142,7 @@ def generate_tests(state: TestGenState) -> TestGenState:
     """   
     response = None  # ✅ prevent crash
     
-    MODELS = [
-        "openai/gpt-4o-mini",
-        "mistralai/mistral-7b-instruct",
-    ]
+    MODEL = "mistralai/mistral-7b-instruct"
 
 
     for attempt in range(3):
