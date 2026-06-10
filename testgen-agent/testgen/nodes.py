@@ -1,0 +1,212 @@
+"""LangGraph nodes for the Cucumber regression test-generation pipeline."""
+
+import logging
+import subprocess
+import time
+from pathlib import Path
+
+import anthropic
+
+from .prompts import RETRY_SUFFIX_TEMPLATE, SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
+from .state import GenerationResult, TestGenState
+
+logger = logging.getLogger(__name__)
+
+MODEL = "claude-opus-4-8"
+MAX_ATTEMPTS = 3
+MAX_CONTEXT_CHARS = 200_000  # guardrail for very large diffs/sources
+
+JAVA_SOURCE_MARKER = "src/main/java"
+FEATURES_DIR_MARKER = "src/test/resources/features"
+
+
+def _run(cmd: list[str], cwd: str) -> str:
+    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=True)
+    return result.stdout
+
+
+def collect_diff(state: TestGenState) -> TestGenState:
+    """Compute the git diff between base and head and list changed files."""
+    repo = state["repo_path"]
+    base, head = state["base_ref"], state["head_ref"]
+
+    diff = _run(["git", "diff", f"{base}..{head}", "--", "."], cwd=repo)
+    changed = _run(["git", "diff", "--name-only", f"{base}..{head}"], cwd=repo)
+    changed_files = [line.strip() for line in changed.splitlines() if line.strip()]
+
+    java_changes = [f for f in changed_files if JAVA_SOURCE_MARKER in f and f.endswith(".java")]
+    update: TestGenState = {"git_diff": diff, "changed_files": changed_files}
+    if not java_changes:
+        update["skipped_reason"] = (
+            "No Java main-source changes between "
+            f"{base} and {head}; nothing to generate tests for."
+        )
+    return update
+
+
+def gather_context(state: TestGenState) -> TestGenState:
+    """Read changed source files, existing feature files, and any API spec."""
+    repo = Path(state["repo_path"])
+    changed_files = state["changed_files"]
+
+    # Full content of every changed main-source Java file, so the model sees the
+    # surrounding class, not just the diff hunks.
+    sources: list[str] = []
+    for rel in changed_files:
+        if JAVA_SOURCE_MARKER not in rel or not rel.endswith(".java"):
+            continue
+        path = repo / rel
+        if path.is_file():
+            sources.append(f"// FILE: {rel}\n{path.read_text(encoding='utf-8')}")
+
+    # Step definitions are part of the reuse contract — include them so the model
+    # knows exactly which step phrasings already have glue code.
+    for step_def in repo.rglob("*StepDefinitions.java"):
+        rel = step_def.relative_to(repo)
+        sources.append(f"// FILE: {rel}\n{step_def.read_text(encoding='utf-8')}")
+
+    features: list[str] = []
+    for feature in sorted(repo.rglob("*.feature")):
+        rel = feature.relative_to(repo)
+        features.append(f"# FILE: {rel}\n{feature.read_text(encoding='utf-8')}")
+
+    api_spec = ""
+    for candidate in ("openapi.yaml", "openapi.yml", "openapi.json", "swagger.yaml", "swagger.json"):
+        matches = list(repo.rglob(candidate))
+        if matches:
+            api_spec = matches[0].read_text(encoding="utf-8")
+            break
+
+    return {
+        "target_component_context": "\n\n".join(sources)[:MAX_CONTEXT_CHARS],
+        "existing_feature_examples": "\n\n".join(features)[:MAX_CONTEXT_CHARS],
+        "api_spec": api_spec[:MAX_CONTEXT_CHARS] or "Not available.",
+        "attempts": 0,
+        "validation_errors": [],
+    }
+
+
+def generate_tests(state: TestGenState) -> TestGenState:
+    """Call Claude to produce the structured test-generation result."""
+    client = anthropic.Anthropic()
+
+    user_prompt = USER_PROMPT_TEMPLATE.format(
+        target_component_context=state["target_component_context"],
+        git_diff=state["git_diff"][:MAX_CONTEXT_CHARS],
+        existing_feature_examples=state["existing_feature_examples"],
+        api_spec=state["api_spec"],
+    )
+    if state.get("validation_errors"):
+        errors = "\n".join(f"- {e}" for e in state["validation_errors"])
+        user_prompt += RETRY_SUFFIX_TEMPLATE.format(errors=errors)
+
+    response = client.messages.parse(
+        model=MODEL,
+        max_tokens=16000,
+        thinking={"type": "adaptive"},
+        system=[
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=[{"role": "user", "content": user_prompt}],
+        output_format=GenerationResult,
+    )
+
+    generation: GenerationResult = response.parsed_output
+    logger.info(
+        "Generated %d feature file(s) for endpoints: %s",
+        len(generation.new_or_modified_features),
+        ", ".join(generation.impacted_endpoints) or "(none)",
+    )
+    return {"generation": generation, "attempts": state.get("attempts", 0) + 1}
+
+
+def validate_output(state: TestGenState) -> TestGenState:
+    """Structurally validate the generated Gherkin before touching the repo."""
+    repo = Path(state["repo_path"]).resolve()
+    generation = state["generation"]
+    errors: list[str] = []
+
+    for feature in generation.new_or_modified_features:
+        name = feature.file_name
+        target = (repo / name).resolve()
+
+        if not name.endswith(".feature"):
+            errors.append(f"{name}: file name must end with .feature")
+        if FEATURES_DIR_MARKER not in name:
+            errors.append(f"{name}: must live under {FEATURES_DIR_MARKER}/")
+        if not target.is_relative_to(repo):
+            errors.append(f"{name}: path escapes the repository root")
+        if feature.action == "UPDATE" and not target.is_file():
+            errors.append(f"{name}: action is UPDATE but the file does not exist (use CREATE)")
+        if feature.action == "CREATE" and target.is_file():
+            errors.append(f"{name}: action is CREATE but the file already exists (use UPDATE)")
+
+        lines = [line.strip() for line in feature.gherkin_content.splitlines()]
+        if not any(line.startswith("Feature:") for line in lines):
+            errors.append(f"{name}: content has no 'Feature:' declaration")
+        if not any(line.startswith(("Scenario:", "Scenario Outline:")) for line in lines):
+            errors.append(f"{name}: content has no scenarios")
+        outline_count = sum(1 for line in lines if line.startswith("Scenario Outline:"))
+        examples_count = sum(1 for line in lines if line.startswith("Examples:"))
+        if outline_count > examples_count:
+            errors.append(f"{name}: a Scenario Outline is missing its Examples table")
+
+    if errors:
+        logger.warning("Validation failed (attempt %d): %s", state["attempts"], errors)
+    return {"validation_errors": errors}
+
+
+def write_features(state: TestGenState) -> TestGenState:
+    """Write the validated feature files into the repository."""
+    repo = Path(state["repo_path"])
+    written: list[str] = []
+    for feature in state["generation"].new_or_modified_features:
+        target = repo / feature.file_name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        content = feature.gherkin_content
+        if not content.endswith("\n"):
+            content += "\n"
+        target.write_text(content, encoding="utf-8")
+        written.append(feature.file_name)
+        logger.info("%s %s", feature.action, feature.file_name)
+    return {"written_files": written}
+
+
+def create_pull_request(state: TestGenState) -> TestGenState:
+    """Commit the generated features on a new branch and open a PR via the gh CLI."""
+    repo = state["repo_path"]
+    generation = state["generation"]
+    branch = f"testgen/{state['head_ref'][:12]}-{int(time.time())}"
+
+    _run(["git", "checkout", "-b", branch], cwd=repo)
+    _run(["git", "add", *state["written_files"]], cwd=repo)
+    _run(
+        ["git", "commit", "-m", "test: regenerate Cucumber regression tests\n\n"
+         + generation.analysis_summary],
+        cwd=repo,
+    )
+    _run(["git", "push", "-u", "origin", branch], cwd=repo)
+
+    endpoints = "\n".join(f"- `{e}`" for e in generation.impacted_endpoints) or "- none"
+    body = (
+        "## Auto-generated regression tests\n\n"
+        f"{generation.analysis_summary}\n\n"
+        f"### Impacted endpoints\n{endpoints}\n\n"
+        f"### Files\n" + "\n".join(f"- `{f}`" for f in state["written_files"]) + "\n\n"
+        "Please review the scenarios before merging. Regression runs automatically "
+        "after merge.\n\n"
+        "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+    )
+    pr_url = _run(
+        ["gh", "pr", "create",
+         "--title", "test: update Cucumber regression suite for latest code changes",
+         "--body", body,
+         "--head", branch],
+        cwd=repo,
+    ).strip()
+    logger.info("Opened PR: %s", pr_url)
+    return {"pr_url": pr_url}
