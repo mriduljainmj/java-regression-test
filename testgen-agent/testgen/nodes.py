@@ -1,6 +1,7 @@
 """LangGraph nodes for the Cucumber regression test-generation pipeline."""
 
 import logging
+import re
 import subprocess
 import time
 from pathlib import Path
