@@ -335,9 +335,15 @@ def generate_tests(state: TestGenState) -> TestGenState:
     response_text: Optional[str] = None
     last_error: Optional[Exception] = None
 
+    # Validation-retry diversity: re-asking the same model after it failed
+    # validation tends to reproduce the same misunderstanding. Rotate the chain
+    # so later attempts start from a different model.
+    rotation = state.get("attempts", 0) % len(MODELS)
+    models = MODELS[rotation:] + MODELS[:rotation]
+
     # Outer loop: fall back across models. Inner loop: retry each model with
     # exponential backoff (5s, 20s) — free-pool 429s usually clear in seconds.
-    for model in MODELS:
+    for model in models:
         retries_left = 3
         while retries_left > 0 and response_text is None:
             try:
@@ -490,8 +496,11 @@ def validate_output(state: TestGenState) -> TestGenState:
                 if "<" in step:
                     message += (
                         " Note: <name> placeholders are only substituted inside "
-                        "Scenario Outlines that have a matching Examples column — "
-                        "in a plain Scenario, use literal values."
+                        "Scenario Outlines that have a matching Examples column. "
+                        "If this placeholder stands for a server-generated id, "
+                        "you cannot know it — rewrite the step using the "
+                        "'the last created <entity>' idiom (see the existing "
+                        "steps) and make the glue track the id internally."
                     )
                 errors.append(message)
 
