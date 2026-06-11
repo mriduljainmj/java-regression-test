@@ -37,7 +37,7 @@ Feature: Product management
     Given a product exists with name "Laptop" and price 999.99
     When a client updates the last created product with name "Gaming Laptop" and price 1299.99
     Then the response status should be 200
-    And the response should contain a product with name "NewUpdatedProdGaming Laptop"
+    And the response should contain a product with name "Gaming Laptop"
 
   Scenario: Delete an existing product
     Given a product exists with name "Laptop" and price 999.99
@@ -47,3 +47,23 @@ Feature: Product management
   Scenario: Delete a product that does not exist
     When a client deletes the product with id 9999
     Then the response status should be 404
+
+  Scenario: Filter products by price range (happy path)
+    Given the product catalog is empty
+    And a product exists with name "Cheap" and price 10.00
+    And a product exists with name "Expensive" and price 1000.00
+    When a client filters products with min price 5.00 and max price 500.00
+    Then the response status should be 200
+    And the response should contain 1 products
+    And the response should contain a product with name "Cheap"
+
+  Scenario: Filter products with invalid price range
+    When a client filters products with min price 200.00 and max price 100.00
+    Then the response status should be 400
+    And the error message should contain "minPrice (200.00) must not exceed maxPrice (100.00)"
+
+  Scenario: Reject price increase beyond 50% limit
+    Given a product exists with name "Gadget" and price 100.00
+    When a client updates the last created product with name "Gadget" and price 200.01
+    Then the response status should be 422
+    And the error message should contain "price increase from 100.00 to 200.01 exceeds the 50% limit per update"
