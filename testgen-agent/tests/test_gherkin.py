@@ -146,6 +146,21 @@ class UndefinedStepsTest(unittest.TestCase):
         undefined = find_undefined_steps(feature, self.patterns)
         self.assertEqual(undefined, ["the client sends an update request"])
 
+    def test_incompatible_value_in_later_examples_row_is_flagged(self):
+        # "null" in an {int} slot, but only in the THIRD row — exactly the bug
+        # that reached CI when only the first row was checked.
+        feature = (
+            "Feature: F\n  Scenario Outline: S\n"
+            "    Then the response status should be <status>\n\n"
+            "    Examples:\n"
+            "      | status |\n"
+            "      | 200    |\n"
+            "      | 404    |\n"
+            "      | null   |\n"
+        )
+        undefined = find_undefined_steps(feature, self.patterns)
+        self.assertEqual(undefined, ["the response status should be null"])
+
     def test_numeric_text_in_string_slot_is_flagged(self):
         feature = (
             "Feature: F\n  Scenario: S\n"

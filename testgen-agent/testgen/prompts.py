@@ -53,8 +53,15 @@ STEP DEFINITIONS (JAVA GLUE)
   update Java step-definition files when the required behavior genuinely cannot be
   expressed with any existing step.
 - New glue must follow the style of the existing step definitions: RestAssured
-  calls, the shared lastResponse state, parameterized cucumber expressions
-  ({string}, {int}, {long}, {double}), and declarative API-level phrasing.
+  calls, parameterized cucumber expressions ({string}, {int}, {long}, {double}),
+  and declarative API-level phrasing.
+- Shared state lives ONLY in the scenario-scoped TestContext bean (@Autowired
+  TestContext context): responses via context.setLastResponse()/getLastResponse(),
+  created entity ids via context.setLastCreatedId("entity", id) /
+  context.getLastCreatedId("entity"). NEVER declare your own lastResponse or
+  last-created-id fields in a glue class — private fields in one glue class are
+  invisible to every other glue class, so "last created" steps will fail at
+  runtime. Never write placeholder/stub logic to "keep the code compiling".
 - When updating an existing glue file, return its FULL content and preserve every
   step definition already in it — removing one breaks existing scenarios.
 - NEVER delete scenarios, drop endpoint coverage, or weaken assertions to satisfy
@@ -65,6 +72,12 @@ STEP DEFINITIONS (JAVA GLUE)
   exactly from the source code logic.
 - In Scenario Outlines, placeholders are always written as <name> (angle
   brackets), including inside docstrings — never {name}.
+- Every Examples row value must be type-compatible with the step parameter it
+  fills: an {int} slot can never hold "null" or text. To test a missing/absent
+  field, use a raw-payload docstring step in a separate Scenario instead of an
+  Examples row.
+- Assert exact error messages from the source code (validation annotation
+  messages, exception messages) — never invent or approximate them.
 
 CONSTRAINTS
 - DO NOT hallucinate annotations or endpoints. Rely strictly on the git diff and the

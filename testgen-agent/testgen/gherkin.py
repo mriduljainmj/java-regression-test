@@ -82,22 +82,28 @@ def extract_scenario_steps(gherkin_text: str) -> list:
     pending_outline_steps: list = []
     in_outline = False
     examples_header: Optional[list] = None
-    examples_first_row: Optional[list] = None
+    examples_rows: list = []
     docstring_delim: Optional[str] = None
 
     def flush_outline():
-        nonlocal pending_outline_steps, examples_header, examples_first_row
+        nonlocal pending_outline_steps, examples_header, examples_rows
         if pending_outline_steps:
-            values = {}
-            if examples_header and examples_first_row:
-                values = dict(zip(examples_header, examples_first_row))
-            for raw in pending_outline_steps:
-                steps.append(
-                    re.sub(r"<([^<>]+)>", lambda m: values.get(m.group(1).strip(), "1"), raw)
-                )
+            # Substitute EVERY data row, not just the first: a later row can hold
+            # a value that is type-incompatible with the step's glue parameter
+            # (e.g. "null" in an {int} slot) and must be caught too.
+            row_values = (
+                [dict(zip(examples_header, row)) for row in examples_rows]
+                if examples_header and examples_rows
+                else [{}]
+            )
+            for values in row_values:
+                for raw in pending_outline_steps:
+                    steps.append(
+                        re.sub(r"<([^<>]+)>", lambda m: values.get(m.group(1).strip(), "1"), raw)
+                    )
         pending_outline_steps = []
         examples_header = None
-        examples_first_row = None
+        examples_rows = []
 
     for raw_line in gherkin_text.splitlines():
         line = raw_line.strip()
@@ -129,8 +135,8 @@ def extract_scenario_steps(gherkin_text: str) -> list:
             if in_outline:
                 if examples_header is None:
                     examples_header = cells
-                elif examples_first_row is None:
-                    examples_first_row = cells
+                else:
+                    examples_rows.append(cells)
             continue
 
         for kw in _STEP_KEYWORDS:
