@@ -14,9 +14,9 @@ Feature: Review management
     And the response should contain a rating of 4
 
   Scenario: Accept the minimum valid rating
-    When a client adds a review for the last created product with rating 3 and comment "Okay"
+    When a client adds a review for the last created product with rating 1 and comment "Okay"
     Then the response status should be 201
-    And the response should contain a rating of 3
+    And the response should contain a rating of 1
 
   Scenario: Rating summary after multiple reviews
     When a client adds a review for the last created product with rating 4 and comment "Good"
@@ -31,9 +31,9 @@ Feature: Review management
     And the error message should contain "<message>"
 
     Examples:
-      | rating | message                   |
-      | 2      | rating must be at least 3 |
-      | 6      | rating must not exceed 5  |
+      | rating | message                     |
+      | 0      | rating must be at least 1   |
+      | 6      | rating must not exceed 5    |
 
   Scenario: Reject a review without a rating
     When a client adds a review for the last created product with payload:
