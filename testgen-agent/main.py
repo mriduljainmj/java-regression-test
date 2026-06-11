@@ -1,11 +1,16 @@
 """CLI entry point for the Cucumber regression test-generation agent.
 
 Usage:
-    export ANTHROPIC_API_KEY=...
+    export OPENROUTER_API_KEY=...
     python main.py --repo /path/to/repo --base <base-sha-or-ref> --head <head-sha-or-ref>
 
 Add --no-pr to write the feature files locally without committing or opening a PR
 (useful for local runs and dry runs in CI).
+
+Environment overrides:
+    TESTGEN_MODEL / TESTGEN_MODELS   model or comma-separated fallback chain
+    TESTGEN_MAX_ATTEMPTS             generation retry budget (default 3)
+    TESTGEN_MAX_CONTEXT_CHARS        per-section context cap (default 60000)
 """
 
 import argparse
@@ -16,6 +21,7 @@ import sys
 from testgen.graph import build_graph
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("testgen.main")
 
 
 def main() -> int:
@@ -28,26 +34,33 @@ def main() -> int:
     args = parser.parse_args()
 
     app = build_graph()
-    result = app.invoke(
-        {
-            "repo_path": args.repo,
-            "base_ref": args.base,
-            "head_ref": args.head,
-            "create_pr": not args.no_pr,
-        }
-    )
+    try:
+        result = app.invoke(
+            {
+                "repo_path": args.repo,
+                "base_ref": args.base,
+                "head_ref": args.head,
+                "create_pr": not args.no_pr,
+            }
+        )
+    except Exception as e:
+        logger.error("test generation failed: %s", e)
+        return 1
 
-    if result.get("skipped_reason"):
-        print(f"Skipped: {result['skipped_reason']}")
+    generation = result.get("generation")
+    if generation is None:
+        # Skipped before generation (no relevant changes in the diff).
+        print(f"Skipped: {result.get('skipped_reason', 'no generation produced')}")
         return 0
 
-    generation = result["generation"]
     summary = {
         "impacted_endpoints": generation.impacted_endpoints,
         "analysis_summary": generation.analysis_summary,
         "written_files": result.get("written_files", []),
         "pr_url": result.get("pr_url"),
     }
+    if result.get("skipped_reason"):
+        summary["note"] = result["skipped_reason"]
     print(json.dumps(summary, indent=2))
     return 0
 

@@ -41,6 +41,7 @@ class TestGenState(TypedDict, total=False):
     target_component_context: str
     existing_feature_examples: str
     api_spec: str
+    step_patterns: list[str]  # cucumber expressions parsed from Java glue code
 
     # Generation + validation loop
     generation: Optional[GenerationResult]

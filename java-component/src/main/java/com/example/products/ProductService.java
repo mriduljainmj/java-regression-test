@@ -6,15 +6,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 @Service
 public class ProductService {
 
+    // A single update may not raise the price by more than 50%.
+    private static final double MAX_PRICE_INCREASE_FACTOR = 1.5;
+
     private final Map<Long, Product> store = new ConcurrentHashMap<>();
     private final AtomicLong sequence = new AtomicLong(0);
 
-    public List<Product> findAll() {
-        return List.copyOf(store.values());
+    public List<Product> findAll(Double minPrice, Double maxPrice) {
+        if (minPrice != null && maxPrice != null && minPrice > maxPrice) {
+            throw new InvalidPriceRangeException(minPrice, maxPrice);
+        }
+        return store.values().stream()
+                .filter(p -> minPrice == null || p.getPrice() >= minPrice)
+                .filter(p -> maxPrice == null || p.getPrice() <= maxPrice)
+                .collect(Collectors.toList());
     }
 
     public Product findById(Long id) {
@@ -34,7 +44,10 @@ public class ProductService {
 
     public Product update(Long id, ProductRequest request) {
         Product product = findById(id);
-        product.setName("NewUpdatedProd" + request.getName());
+        if (request.getPrice() > product.getPrice() * MAX_PRICE_INCREASE_FACTOR) {
+            throw new PriceIncreaseExceededException(product.getPrice(), request.getPrice());
+        }
+        product.setName(request.getName());
         product.setPrice(request.getPrice());
         return product;
     }

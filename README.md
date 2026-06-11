@@ -39,15 +39,41 @@ LangGraph state machine:
 `collect_diff → gather_context → generate_tests → validate_output → write_features → create_pull_request`
 
 - **collect_diff** — `git diff base..head`; exits early if no Java main-source changes.
-- **gather_context** — reads the full changed source files, all step definitions
-  (the step-reuse contract), every existing `.feature` file, and an OpenAPI spec if present.
-- **generate_tests** — calls Claude (`claude-opus-4-8`, adaptive thinking, structured
-  output via a Pydantic schema) with the diff + context.
+  Handles CI edge cases: all-zero `before` SHA (first push), force-pushed/unreachable
+  base (falls back to `head~1`, then the empty tree for single-commit repos).
+- **gather_context** — reads the full component source (changed files first), the
+  Java glue code (found by `@Given/@When/@Then` content, not file naming), every
+  existing `.feature` file, and an OpenAPI spec if present. Skips `target/`, venvs, etc.
+- **generate_tests** — calls the model via OpenRouter with a fallback chain
+  (`TESTGEN_MODELS`), JSON mode when supported, exponential backoff on 429s, and
+  typed status-code handling. Malformed JSON or schema mismatches don't crash —
+  they re-enter the retry loop as feedback to the model.
 - **validate_output** — structural Gherkin checks (Feature/Scenario present, Outline
-  has Examples, paths under `features/`, CREATE vs UPDATE consistency). On failure the
-  errors are fed back to the model — up to 3 attempts.
-- **write_features / create_pull_request** — writes files, commits to a `testgen/...`
-  branch, opens the PR via `gh`.
+  has Examples, paths under `features/`, CREATE vs UPDATE consistency, duplicate
+  files) **plus step-definition matching**: every generated step (including
+  Scenario Outline steps with `<placeholder>` substitution) must match a cucumber
+  expression parsed from the Java glue, or the exact offending step is fed back to
+  the model. Up to `TESTGEN_MAX_ATTEMPTS` (default 3) attempts.
+- **write_features / create_pull_request** — writes files (skipping content-identical
+  ones), commits to a `testgen/...` branch, opens the PR via `gh`. If the generated
+  suite is byte-identical to the existing one, no PR is opened.
+
+### Configuration (env vars)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OPENROUTER_API_KEY` | — | required |
+| `TESTGEN_MODEL` | `openai/gpt-oss-120b:free` | first model in the fallback chain |
+| `TESTGEN_MODELS` | — | comma-separated list replacing the whole chain |
+| `TESTGEN_MAX_ATTEMPTS` | `3` | generate→validate retry budget |
+| `TESTGEN_MAX_CONTEXT_CHARS` | `60000` | per-section context cap |
+
+### Agent tests
+
+```bash
+cd testgen-agent
+.venv/bin/python -m unittest discover tests
+```
 
 ### Run locally
 

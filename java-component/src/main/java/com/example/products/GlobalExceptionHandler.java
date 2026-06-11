@@ -12,9 +12,20 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(ProductNotFoundException.class)
-    public ResponseEntity<Map<String, String>> handleNotFound(ProductNotFoundException ex) {
+    @ExceptionHandler({ProductNotFoundException.class, OrderNotFoundException.class})
+    public ResponseEntity<Map<String, String>> handleNotFound(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidPriceRangeException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidRange(InvalidPriceRangeException ex) {
+        return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler({PriceIncreaseExceededException.class, OrderLimitExceededException.class})
+    public ResponseEntity<Map<String, String>> handleBusinessRule(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
                 .body(Map.of("error", ex.getMessage()));
     }
 
