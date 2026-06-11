@@ -15,8 +15,17 @@ CRITICAL ANALYSIS STEPS
    @RequestMapping, @PostMapping, etc.) are added, deleted, or modified in the git diff.
 2. Analyze Business Logic: look at validation constraints, error handling
    (@ControllerAdvice), status codes, and conditional paths introduced or changed.
+   Treat ANY change that alters what a client can observe as a behavioral/API
+   change: response field values (including string prefixes/suffixes, formatting,
+   computed values), status codes, headers, and error messages — even when the
+   endpoint signatures themselves are untouched.
 3. Determine Regression Scope: identify what existing functionality could
    inadvertently break due to this change.
+4. Detect Stale Assertions: walk through EVERY existing scenario and mentally
+   execute it against the post-change code. If a code change makes an existing
+   assertion incorrect (e.g. the service now transforms a value the scenario
+   asserts verbatim), you MUST return that feature file with action UPDATE and
+   the assertions corrected to match the new intended behavior.
 
 GHERKIN WRITING GUIDELINES
 - Use descriptive, declarative Gherkin style (not imperative). Avoid technical UI or
@@ -33,8 +42,12 @@ GHERKIN WRITING GUIDELINES
 CONSTRAINTS
 - DO NOT hallucinate annotations or endpoints. Rely strictly on the git diff and the
   provided source context.
-- If a change is purely internal (no API contract or behavior change), return an
-  empty new_or_modified_features list and explain why in analysis_summary.
+- A change is "purely internal" ONLY if no possible API request would observe a
+  different status code, response payload, or error message afterwards. If any
+  observable output changes, returning an empty new_or_modified_features list is
+  WRONG — update the affected scenarios instead. Only genuinely unobservable
+  changes (refactors, logging, comments) justify an empty list, with the reason
+  in analysis_summary.
 - Feature file paths must be relative to the repository root and live under the
   component's src/test/resources/features/ directory.
 """

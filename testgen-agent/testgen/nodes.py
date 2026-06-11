@@ -17,7 +17,10 @@ from .state import GenerationResult, TestGenState
 logger = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 3
-MAX_CONTEXT_CHARS = 10000  # guardrail for very large diffs/sources
+# Per-section guardrail for very large diffs/sources. ~15K tokens per section —
+# comfortably inside the 131K-token windows of the free models below, but large
+# enough that the full component source + features + step definitions fit.
+MAX_CONTEXT_CHARS = 60000
 
 # Free models are shared pools and get rate-limited upstream (429) without warning.
 # Tried in order; on 429/5xx the next model is attempted, so one congested pool
@@ -61,15 +64,26 @@ def gather_context(state: TestGenState) -> TestGenState:
     repo = Path(state["repo_path"])
     changed_files = state["changed_files"]
 
-    # Full content of every changed main-source Java file, so the model sees the
-    # surrounding class, not just the diff hunks.
+    # All main-source Java files, with the changed ones FIRST so truncation by
+    # MAX_CONTEXT_CHARS sacrifices the least relevant context. The model needs
+    # the unchanged files too: stale-assertion detection means executing the
+    # existing scenarios against the post-change code, and the behavior an
+    # assertion depends on often lives outside the diffed files.
+    changed_java = [
+        rel for rel in changed_files
+        if JAVA_SOURCE_MARKER in rel and rel.endswith(".java")
+    ]
+    other_java = sorted(
+        str(p.relative_to(repo))
+        for p in repo.rglob("*.java")
+        if JAVA_SOURCE_MARKER in str(p) and str(p.relative_to(repo)) not in changed_java
+    )
     sources: list[str] = []
-    for rel in changed_files:
-        if JAVA_SOURCE_MARKER not in rel or not rel.endswith(".java"):
-            continue
+    for rel in changed_java + other_java:
         path = repo / rel
         if path.is_file():
-            sources.append(f"// FILE: {rel}\n{path.read_text(encoding='utf-8')}")
+            marker = "CHANGED IN THIS DIFF" if rel in changed_java else "unchanged"
+            sources.append(f"// FILE ({marker}): {rel}\n{path.read_text(encoding='utf-8')}")
 
     # Step definitions are part of the reuse contract — include them so the model
     # knows exactly which step phrasings already have glue code.
