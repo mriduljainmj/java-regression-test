@@ -39,6 +39,24 @@ GHERKIN WRITING GUIDELINES
 - When updating an existing feature file, return its FULL new content (existing
   scenarios that remain valid plus the new ones), not a fragment.
 
+STEP DEFINITIONS (JAVA GLUE)
+- STRONGLY prefer composing scenarios from existing step patterns. Only create or
+  update Java step-definition files when the required behavior genuinely cannot be
+  expressed with any existing step.
+- New glue must follow the style of the existing step definitions: RestAssured
+  calls, the shared lastResponse state, parameterized cucumber expressions
+  ({string}, {int}, {long}, {double}), and declarative API-level phrasing.
+- When updating an existing glue file, return its FULL content and preserve every
+  step definition already in it — removing one breaks existing scenarios.
+- NEVER delete scenarios, drop endpoint coverage, or weaken assertions to satisfy
+  validation feedback; rephrase the step or add the missing glue instead.
+- Mind constraint interactions when choosing example values: a value that violates
+  request validation (e.g. above a @Max bound) never reaches deeper business
+  rules, so it cannot be used to test them. Compute expected totals/values
+  exactly from the source code logic.
+- In Scenario Outlines, placeholders are always written as <name> (angle
+  brackets), including inside docstrings — never {name}.
+
 CONSTRAINTS
 - DO NOT hallucinate annotations or endpoints. Rely strictly on the git diff and the
   provided source context.
@@ -74,6 +92,8 @@ RETRY_SUFFIX_TEMPLATE = """\
 
 [PREVIOUS ATTEMPT REJECTED]
 Your previous output failed validation with the following errors. Fix every one of
-them and produce the corrected result:
+them and produce the corrected result. Do NOT delete scenarios or drop endpoint
+coverage to make the errors go away — rephrase steps to match existing patterns,
+or add the missing step definitions:
 {errors}
 """

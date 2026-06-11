@@ -266,8 +266,17 @@ def generate_tests(state: TestGenState) -> TestGenState:
         "action": "CREATE or UPDATE",
         "gherkin_content": "string"
         }}
+    ],
+    "new_or_modified_step_definitions": [
+        {{
+        "file_name": "string (under src/test/java/, only when no existing step fits)",
+        "action": "CREATE or UPDATE",
+        "java_content": "string (FULL Java source of the glue file)"
+        }}
     ]
     }}
+    new_or_modified_step_definitions is usually an empty list — only populate it
+    when a scenario genuinely cannot be written with the existing step patterns.
     """
 
     response_text: Optional[str] = None
@@ -346,8 +355,52 @@ def validate_output(state: TestGenState) -> TestGenState:
     repo = Path(state["repo_path"]).resolve()
     step_patterns = state.get("step_patterns", [])
     errors: list = []
-
     seen_names = set()
+
+    # Validate proposed Java glue first: its step patterns extend the set the
+    # generated Gherkin is allowed to use.
+    generated_patterns: list = []
+    for glue in generation.new_or_modified_step_definitions:
+        name = glue.file_name.lstrip("./")
+        target = (repo / name).resolve()
+
+        if name in seen_names:
+            errors.append(f"{name}: appears more than once in the output")
+        seen_names.add(name)
+
+        if not name.endswith(".java"):
+            errors.append(f"{name}: step-definition file name must end with .java")
+        if JAVA_TEST_MARKER not in name:
+            errors.append(f"{name}: step definitions must live under {JAVA_TEST_MARKER}/")
+        if not target.is_relative_to(repo):
+            errors.append(f"{name}: path escapes the repository root")
+        if glue.action == "UPDATE" and not target.is_file():
+            errors.append(f"{name}: action is UPDATE but the file does not exist (use CREATE)")
+        if glue.action == "CREATE" and target.is_file():
+            errors.append(f"{name}: action is CREATE but the file already exists (use UPDATE)")
+
+        patterns_in_file = extract_step_patterns(glue.java_content)
+        if not patterns_in_file:
+            errors.append(
+                f"{name}: contains no @Given/@When/@Then step definitions — "
+                "if no new glue is needed, return an empty new_or_modified_step_definitions list"
+            )
+        if glue.action == "UPDATE" and target.is_file():
+            removed = [
+                p for p in extract_step_patterns(_read(target))
+                if p not in patterns_in_file
+            ]
+            if removed:
+                errors.append(
+                    f"{name}: UPDATE removes existing step definition(s) "
+                    f"{removed} — return the FULL file content preserving every "
+                    "existing step"
+                )
+        generated_patterns.extend(patterns_in_file)
+
+    # Steps may match existing glue OR glue proposed in this same generation.
+    all_patterns = step_patterns + generated_patterns
+
     for feature in generation.new_or_modified_features:
         name = feature.file_name.lstrip("./")
         target = (repo / name).resolve()
@@ -377,14 +430,16 @@ def validate_output(state: TestGenState) -> TestGenState:
         if outline_count > examples_count:
             errors.append(f"{name}: a Scenario Outline is missing its Examples table")
 
-        # The reuse contract: every step must have glue code, or Cucumber will
-        # fail the PR with undefined steps. Feed exact offenders back.
-        if step_patterns:
-            for step in find_undefined_steps(feature.gherkin_content, step_patterns):
+        # The reuse contract: every step must have glue code — existing or
+        # proposed in this generation — or Cucumber will fail the PR with
+        # undefined steps. Feed exact offenders back.
+        if all_patterns:
+            for step in find_undefined_steps(feature.gherkin_content, all_patterns):
                 errors.append(
                     f'{name}: step "{step}" matches no existing step definition. '
-                    "Rephrase it using one of the step patterns from the "
-                    "provided step definitions file."
+                    "Rephrase it using one of the step patterns from the provided "
+                    "step definitions, or add the missing glue in "
+                    "new_or_modified_step_definitions."
                 )
 
     if errors:
@@ -393,21 +448,28 @@ def validate_output(state: TestGenState) -> TestGenState:
 
 
 def write_features(state: TestGenState) -> TestGenState:
-    """Write the validated feature files; skip files whose content is unchanged."""
+    """Write the validated feature and glue files; skip unchanged content."""
     repo = Path(state["repo_path"])
+    generation = state["generation"]
     written: list = []
-    for feature in state["generation"].new_or_modified_features:
-        target = repo / feature.file_name.lstrip("./")
+
+    outputs = [(f.file_name, f.action, f.gherkin_content)
+               for f in generation.new_or_modified_features]
+    outputs += [(g.file_name, g.action, g.java_content)
+                for g in generation.new_or_modified_step_definitions]
+
+    for file_name, action, raw_content in outputs:
+        target = repo / file_name.lstrip("./")
         target.parent.mkdir(parents=True, exist_ok=True)
-        content = feature.gherkin_content.replace("\r\n", "\n")
+        content = raw_content.replace("\r\n", "\n")
         if not content.endswith("\n"):
             content += "\n"
         if target.is_file() and _read(target) == content:
-            logger.info("UNCHANGED %s (generated content identical; skipping)", feature.file_name)
+            logger.info("UNCHANGED %s (generated content identical; skipping)", file_name)
             continue
         target.write_text(content, encoding="utf-8")
         written.append(str(target.relative_to(repo)))
-        logger.info("%s %s", feature.action, feature.file_name)
+        logger.info("%s %s", action, file_name)
     return {"written_files": written}
 
 

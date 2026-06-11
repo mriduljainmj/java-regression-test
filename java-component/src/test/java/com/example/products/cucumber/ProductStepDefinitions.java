@@ -19,6 +19,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.notNullValue;
 
 public class ProductStepDefinitions {
@@ -211,7 +212,14 @@ public class ProductStepDefinitions {
 
     @Then("the response should contain a product with name {string}")
     public void theResponseShouldContainAProductWithName(String name) {
-        lastResponse.then().body("name", equalTo(name));
+        // Works against both a single product object and a product list: on a
+        // JSON array, jsonPath "name" collects every element's name.
+        String body = lastResponse.getBody().asString().trim();
+        if (body.startsWith("[")) {
+            lastResponse.then().body("name", hasItem(name));
+        } else {
+            lastResponse.then().body("name", equalTo(name));
+        }
     }
 
     @Then("the response should contain {int} products")

@@ -27,9 +27,10 @@ Feature: Order management
       | 50  | 900.00 | 10.0 |
 
   Scenario: Reject order exceeding total limit
-    When a client places an order for the last created product with quantity 300
+    Given a product exists with name "Server" and price 100.00
+    When a client places an order for the last created product with quantity 60
     Then the response status should be 422
-    And the error message should contain "order total 6000.00 exceeds the 5000.00 limit"
+    And the error message should contain "order total 5400.00 exceeds the 5000.00 limit"
 
   Scenario: Retrieve an existing order
     Given a product exists with name "Gizmo" and price 15.00
@@ -47,10 +48,10 @@ Feature: Order management
   Scenario Outline: Order request validation errors
     When a client places an order with payload:
       """
-      {payload}
+      <payload>
       """
     Then the response status should be 400
-    And the error message should contain "{message}"
+    And the error message should contain "<message>"
 
     Examples:
       | payload                                 | message                                 |

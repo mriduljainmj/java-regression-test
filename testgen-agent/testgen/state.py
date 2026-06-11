@@ -16,6 +16,22 @@ class FeatureFile(BaseModel):
     gherkin_content: str = Field(description="Full Gherkin content of the feature file")
 
 
+class StepDefinitionFile(BaseModel):
+    """One Java step-definition (glue) file to create or update.
+
+    Only needed when the required behavior cannot be expressed with existing
+    step patterns. UPDATE content must be the FULL file and must preserve every
+    step definition that already exists in it.
+    """
+
+    file_name: str = Field(
+        description="Path relative to the repository root, under src/test/java/, "
+        "e.g. java-component/src/test/java/com/example/products/cucumber/OrderStepDefinitions.java"
+    )
+    action: Literal["CREATE", "UPDATE"]
+    java_content: str = Field(description="Full Java source of the step-definition file")
+
+
 class GenerationResult(BaseModel):
     """Structured output produced by the LLM."""
 
@@ -26,6 +42,7 @@ class GenerationResult(BaseModel):
         description="Brief explanation of what changed and what needs regression testing"
     )
     new_or_modified_features: list[FeatureFile]
+    new_or_modified_step_definitions: list[StepDefinitionFile] = Field(default_factory=list)
 
 
 class TestGenState(TypedDict, total=False):

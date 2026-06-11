@@ -58,6 +58,12 @@ LangGraph state machine:
   ones), commits to a `testgen/...` branch, opens the PR via `gh`. If the generated
   suite is byte-identical to the existing one, no PR is opened.
 
+The agent can also propose **Java step definitions** (`new_or_modified_step_definitions`)
+when no existing step pattern can express a behavior. Guard rails: glue must live
+under `src/test/java/`, must contain real `@Given/@When/@Then` annotations, and an
+UPDATE must preserve every step definition already in the file. Steps in generated
+scenarios may reference either existing glue or glue proposed in the same generation.
+
 ### Configuration (env vars)
 
 | Variable | Default | Purpose |
