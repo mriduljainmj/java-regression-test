@@ -7,6 +7,12 @@ on:
     branches: [main]
     paths:
       - "java-component/src/main/**"
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Base ref/SHA to diff against (empty = parent of HEAD)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -16,7 +22,7 @@ jobs:
   generate:
     runs-on: ubuntu-latest
     # Don't react to the test PRs this workflow itself produces.
-    if: "${{ github.event.head_commit && !startsWith(github.event.head_commit.message, 'test: ') }}"
+    if: "${{ github.event_name == 'workflow_dispatch' || (github.event.head_commit && !startsWith(github.event.head_commit.message, 'test: ')) }}"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,5 +45,5 @@ jobs:
           git config user.email "testgen-agent@users.noreply.github.com"
           python main.py \
             --repo "$GITHUB_WORKSPACE" \
-            --base "${{ github.event.before }}" \
+            --base "${{ github.event.inputs.base || github.event.before }}" \
             --head "${{ github.sha }}"

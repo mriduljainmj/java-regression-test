@@ -13,12 +13,17 @@ from openai import OpenAI
 from pydantic import ValidationError
 
 from .gherkin import extract_step_patterns, find_undefined_steps
-from .prompts import RETRY_SUFFIX_TEMPLATE, SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
-from .state import GenerationResult, TestGenState
+from .prompts import (
+    OUTPUT_FORMAT_INSTRUCTIONS,
+    RETRY_SUFFIX_TEMPLATE,
+    SYSTEM_PROMPT,
+    USER_PROMPT_TEMPLATE,
+)
+from .state import FeatureFile, GenerationResult, StepDefinitionFile, TestGenState
 
 logger = logging.getLogger(__name__)
 
-MAX_ATTEMPTS = int(os.environ.get("TESTGEN_MAX_ATTEMPTS", "3"))
+MAX_ATTEMPTS = int(os.environ.get("TESTGEN_MAX_ATTEMPTS", "4"))
 
 # Per-section guardrail for very large diffs/sources. ~15K tokens per section —
 # comfortably inside the 131K-token windows of the free models below, but large
@@ -196,21 +201,73 @@ def _strip_markdown_fences(text: str) -> str:
     return text
 
 
-def _parse_generation(raw_text: str) -> GenerationResult:
-    """Parse model output into a GenerationResult; raise ValueError with a
-    model-actionable message on any failure."""
-    text = _strip_markdown_fences(raw_text)
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
-        # Fall back to the outermost brace pair (models sometimes add prose).
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-        if not match:
-            raise ValueError("no JSON object found in the response")
+_FILE_BLOCK_RE = re.compile(
+    r"===\s*(FEATURE|STEPDEF)\s+(CREATE|UPDATE)\s+(\S+)\s*===\s*\n(.*?)\n\s*===\s*END\s*===",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def _parse_file_blocks(text: str) -> GenerationResult:
+    """Parse the delimited-block output format (the preferred format: raw file
+    contents need no escaping, which weak models reliably get wrong in JSON)."""
+    analysis_match = re.search(r"^ANALYSIS:\s*(.+)$", text, re.MULTILINE)
+    endpoints_match = re.search(r"^ENDPOINTS:\s*(.+)$", text, re.MULTILINE)
+    blocks = _FILE_BLOCK_RE.findall(text)
+
+    if not blocks and not analysis_match:
+        raise ValueError(
+            "no '=== FEATURE|STEPDEF CREATE|UPDATE <path> ===' file blocks and "
+            "no ANALYSIS line found"
+        )
+
+    endpoints = []
+    if endpoints_match:
+        endpoints = [e.strip() for e in endpoints_match.group(1).split(",")
+                     if e.strip() and e.strip().lower() not in ("none", "n/a")]
+
+    features, stepdefs = [], []
+    for kind, action, path, content in blocks:
+        if kind.upper() == "FEATURE":
+            features.append(FeatureFile(
+                file_name=path, action=action.upper(), gherkin_content=content,
+            ))
+        else:
+            stepdefs.append(StepDefinitionFile(
+                file_name=path, action=action.upper(), java_content=content,
+            ))
+
+    return GenerationResult(
+        impacted_endpoints=endpoints,
+        analysis_summary=analysis_match.group(1).strip() if analysis_match else "",
+        new_or_modified_features=features,
+        new_or_modified_step_definitions=stepdefs,
+    )
+
+
+def _repair_json_escapes(text: str) -> str:
+    """Escape lone backslashes that aren't valid JSON escapes — the most common
+    model error when Java source ends up inside a JSON string."""
+    return re.sub(r'\\(?!["\\/bfnrtu])', r"\\\\", text)
+
+
+def _parse_json(text: str) -> GenerationResult:
+    """Legacy JSON format, kept as a fallback for models that emit it anyway."""
+    candidates = [text]
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match and match.group(0) != text:
+        candidates.append(match.group(0))
+    candidates += [_repair_json_escapes(c) for c in list(candidates)]
+
+    parsed = None
+    last_err = None
+    for candidate in candidates:
         try:
-            parsed = json.loads(match.group(0))
+            parsed = json.loads(candidate)
+            break
         except json.JSONDecodeError as e:
-            raise ValueError(f"response contained invalid JSON: {e}")
+            last_err = e
+    if parsed is None:
+        raise ValueError(f"response contained invalid JSON: {last_err}")
     try:
         return GenerationResult.model_validate(parsed)
     except ValidationError as e:
@@ -218,6 +275,23 @@ def _parse_generation(raw_text: str) -> GenerationResult:
             f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in e.errors()
         )
         raise ValueError(f"JSON did not match the required schema: {compact}")
+
+
+def _parse_generation(raw_text: str) -> GenerationResult:
+    """Parse model output into a GenerationResult; raise ValueError with a
+    model-actionable message on any failure."""
+    text = _strip_markdown_fences(raw_text)
+
+    # Preferred: delimited file blocks. Fallback: legacy JSON.
+    if _FILE_BLOCK_RE.search(text) or text.lstrip().upper().startswith("ANALYSIS:"):
+        try:
+            return _parse_file_blocks(text)
+        except (ValueError, ValidationError) as block_err:
+            if not text.lstrip().startswith("{"):
+                raise ValueError(str(block_err))
+    if text.lstrip().startswith("{"):
+        return _parse_json(text)
+    return _parse_file_blocks(text)  # raises with the block-format guidance
 
 
 def generate_tests(state: TestGenState) -> TestGenState:
@@ -255,28 +329,7 @@ def generate_tests(state: TestGenState) -> TestGenState:
 
     {user_prompt}
 
-    IMPORTANT:
-    Return ONLY valid JSON in this format:
-    {{
-    "analysis_summary": "string",
-    "impacted_endpoints": ["string"],
-    "new_or_modified_features": [
-        {{
-        "file_name": "string",
-        "action": "CREATE or UPDATE",
-        "gherkin_content": "string"
-        }}
-    ],
-    "new_or_modified_step_definitions": [
-        {{
-        "file_name": "string (under src/test/java/, only when no existing step fits)",
-        "action": "CREATE or UPDATE",
-        "java_content": "string (FULL Java source of the glue file)"
-        }}
-    ]
-    }}
-    new_or_modified_step_definitions is usually an empty list — only populate it
-    when a scenario genuinely cannot be written with the existing step patterns.
+    {OUTPUT_FORMAT_INSTRUCTIONS}
     """
 
     response_text: Optional[str] = None
@@ -285,16 +338,13 @@ def generate_tests(state: TestGenState) -> TestGenState:
     # Outer loop: fall back across models. Inner loop: retry each model with
     # exponential backoff (5s, 20s) — free-pool 429s usually clear in seconds.
     for model in MODELS:
-        json_mode = True  # ask for JSON mode; drop it if the model rejects it
         retries_left = 3
         while retries_left > 0 and response_text is None:
             try:
-                kwargs = {"response_format": {"type": "json_object"}} if json_mode else {}
                 response = client.chat.completions.create(
                     model=model,
                     messages=[{"role": "user", "content": full_prompt}],
                     temperature=0,
-                    **kwargs,
                 )
                 content = response.choices[0].message.content
                 if not content or not content.strip():
@@ -309,13 +359,8 @@ def generate_tests(state: TestGenState) -> TestGenState:
                 logger.warning("[%s] failed (status=%s): %s", model, status, e)
                 if status == 402:
                     raise RuntimeError("OpenRouter billing required") from e
-                if status == 404:
-                    break  # model removed from catalog — next model
-                if status == 400:
-                    if json_mode:
-                        json_mode = False  # model rejects response_format; free retry
-                        continue
-                    break  # request shape rejected — next model
+                if status in (400, 404):
+                    break  # bad request shape or model removed — next model
                 retries_left -= 1
                 if retries_left > 0:
                     time.sleep(5 * 4 ** (2 - retries_left))  # 5s, then 20s
@@ -337,8 +382,10 @@ def generate_tests(state: TestGenState) -> TestGenState:
             "attempts": attempts,
             "validation_errors": [
                 f"Your previous response could not be used: {e}. "
-                "Return exactly ONE JSON object matching the schema, with no "
-                "surrounding prose or markdown fences."
+                "Follow the OUTPUT FORMAT exactly: an ANALYSIS line, an ENDPOINTS "
+                "line, then one '=== FEATURE|STEPDEF CREATE|UPDATE <path> ===' "
+                "block per file ending with '=== END ==='. Raw file contents only "
+                "— no JSON, no markdown fences."
             ],
         }
     return {"generation": generation, "attempts": attempts, "validation_errors": []}
@@ -435,12 +482,18 @@ def validate_output(state: TestGenState) -> TestGenState:
         # undefined steps. Feed exact offenders back.
         if all_patterns:
             for step in find_undefined_steps(feature.gherkin_content, all_patterns):
-                errors.append(
+                message = (
                     f'{name}: step "{step}" matches no existing step definition. '
                     "Rephrase it using one of the step patterns from the provided "
-                    "step definitions, or add the missing glue in "
-                    "new_or_modified_step_definitions."
+                    "step definitions, or add the missing glue in a STEPDEF block."
                 )
+                if "<" in step:
+                    message += (
+                        " Note: <name> placeholders are only substituted inside "
+                        "Scenario Outlines that have a matching Examples column — "
+                        "in a plain Scenario, use literal values."
+                    )
+                errors.append(message)
 
     if errors:
         logger.warning("Validation failed (attempt %d): %s", state["attempts"], errors)

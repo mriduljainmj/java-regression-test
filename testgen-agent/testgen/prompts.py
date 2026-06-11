@@ -88,6 +88,33 @@ USER_PROMPT_TEMPLATE = """\
 Analyze the changes and produce the regression test cases.
 """
 
+OUTPUT_FORMAT_INSTRUCTIONS = """\
+OUTPUT FORMAT — follow EXACTLY. Do NOT output JSON. Do NOT use markdown fences.
+
+Start with two lines:
+ANALYSIS: <one-paragraph summary of what changed and what needs regression testing>
+ENDPOINTS: <comma-separated impacted endpoints, e.g. POST /api/v1/orders, GET /api/v1/orders/{id}>
+
+Then one block per file. Feature files use FEATURE blocks; Java step-definition
+files (only when no existing step pattern fits) use STEPDEF blocks:
+
+=== FEATURE CREATE <path/relative/to/repo/root.feature> ===
+<full raw Gherkin content — no escaping>
+=== END ===
+
+=== STEPDEF UPDATE <path/relative/to/repo/root.java> ===
+<full raw Java source — no escaping>
+=== END ===
+
+Rules:
+- Action is CREATE for a new file, UPDATE for an existing file (return the FULL
+  new content of the file, not a fragment).
+- Write file contents raw between the markers: no JSON escaping, no markdown
+  fences, no commentary inside blocks.
+- If the change is purely internal (nothing observable changed), output only the
+  ANALYSIS and ENDPOINTS lines with no blocks.
+"""
+
 RETRY_SUFFIX_TEMPLATE = """\
 
 [PREVIOUS ATTEMPT REJECTED]
