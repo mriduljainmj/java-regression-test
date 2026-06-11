@@ -18,7 +18,15 @@ logger = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 3
 MAX_CONTEXT_CHARS = 10000  # guardrail for very large diffs/sources
-MODEL = "google/gemma-4-26b-a4b-it:free"
+
+# Free models are shared pools and get rate-limited upstream (429) without warning.
+# Tried in order; on 429/5xx the next model is attempted, so one congested pool
+# doesn't fail the whole run. Override the first choice with TESTGEN_MODEL.
+MODELS = [
+    os.environ.get("TESTGEN_MODEL", "openai/gpt-oss-120b:free"),
+    "openai/gpt-oss-20b:free",
+    "google/gemma-4-26b-a4b-it:free",
+]
 
 JAVA_SOURCE_MARKER = "src/main/java"
 FEATURES_DIR_MARKER = "src/test/resources/features"
@@ -134,31 +142,43 @@ def generate_tests(state: TestGenState) -> TestGenState:
     }}
     """   
     response = None  # ✅ prevent crash
+    last_error = None
 
+    # Outer loop: fall back across models. Inner loop: retry each model with
+    # exponential backoff (5s, 20s) — free-pool 429s usually clear in seconds.
+    for model in MODELS:
+        for attempt in range(3):
+            try:
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": full_prompt}],
+                    temperature=0,
+                )
+                logger.info("Generated with model %s", model)
+                break
 
-    for attempt in range(3):
-        try:
-            response = client.chat.completions.create(
-                model=MODEL,
-                messages=[{"role": "user", "content": full_prompt}],
-                temperature=0,
-            )
+            except Exception as e:
+                last_error = e
+                print(f"[{model}] attempt {attempt+1} failed: {e}")
+
+                if "402" in str(e):
+                    raise RuntimeError("OpenRouter billing required")
+
+                if "404" in str(e):
+                    print(f"[{model}] not found; falling back to next model")
+                    break  # no point retrying a missing model
+
+                if attempt < 2:
+                    time.sleep(5 * (4 ** attempt))  # 5s, then 20s
+
+        if response is not None:
             break
-
-        except Exception as e:
-            print(f"Attempt {attempt+1} failed: {e}")
-
-            if "402" in str(e):
-                raise RuntimeError("OpenRouter billing required")
-
-            if "404" in str(e):
-                raise RuntimeError(f"Model not found: {MODEL}")
-
-            time.sleep(2)
 
     # ✅ FINAL SAFETY CHECK
     if response is None:
-        raise RuntimeError("All retries failed. No response from model.")
+        raise RuntimeError(
+            f"All models exhausted ({', '.join(MODELS)}). Last error: {last_error}"
+        )
 
     raw_text = response.choices[0].message.content.strip()
 
