@@ -163,3 +163,65 @@ Run workflow, setting `base` to the commit before the change.
 - New glue uses `TestContext` and the "last created <entity>" idiom?
 - Scenarios that *should* exist aren't missing (each changed/added endpoint covered,
   happy + unhappy paths)?
+
+## Limitations
+
+### How much change one run can handle
+
+Generation is a **single LLM call** — no chunking, no multi-pass. That sets the
+ceilings:
+
+| Limit | Value | Effect when exceeded |
+|---|---|---|
+| Git diff in the prompt | 60,000 chars (`TESTGEN_MAX_CONTEXT_CHARS`) | Diff is silently truncated; changes past the cut-off are invisible to the model |
+| Component source in the prompt | 60,000 chars | Changed files survive (ordered first); stale-assertion detection over unchanged files degrades. Roughly 80–100+ Java files won't fit |
+| Existing features + glue in the prompt | 60,000 chars | Step-reuse alignment weakens on very large suites |
+| Generated output | free-tier completion caps (~4–16K tokens) | Roughly 3–6 files per run; bigger asks truncate mid-output → parse failure → retries exhausted |
+
+The quality ceiling arrives **before** the mechanical ones: with free models the
+sweet spot is **1–3 endpoints' worth of behavioral change per push**. Beyond
+~5 endpoints or several interacting business rules in one diff, coverage gets
+shallow and boundary/arithmetic errors multiply faster than the retry loop can
+correct. Note it is *behavioral density*, not diff size, that matters — a
+3,000-line mechanical refactor with no API change is handled correctly
+("purely internal, no tests"), while a 40-line diff adding three interacting
+pricing rules is the hard case.
+
+Working within it:
+- Merge one feature at a time — batch size per run equals push size.
+- For a big change already merged, replay it in slices: Run workflow with `base`
+  set to intermediate commits.
+- To raise the ceilings: a stronger paid model (`TESTGEN_MODEL`, e.g.
+  `anthropic/claude-haiku-4.5`) roughly doubles handleable complexity; raising
+  `TESTGEN_MAX_CONTEXT_CHARS` helps input but not output or model depth. The
+  structural fix for large components is one generation call per impacted
+  controller (fan-out in the graph) — not implemented.
+
+### What validation can and cannot catch
+
+The validator guarantees *structure*, not *meaning*:
+
+- **Caught pre-PR**: undefined steps (no matching glue), bad Outline placeholders,
+  type-incompatible Examples values, CREATE/UPDATE mismatches, glue that drops
+  existing step definitions, paths outside the test tree.
+- **Caught by the PR's regression run**: Java glue that doesn't compile, scenarios
+  that fail against the real API (wrong status codes, wrong messages, broken state
+  assumptions).
+- **Caught only by a human reviewer**: expected values that are plausible but wrong
+  (a boundary on the wrong side, an approximated error message, a discount applied
+  after instead of before a cap), missing coverage, and tests that "bless" an
+  accidental behavior change as intended. When a run fails after all retries the
+  workflow goes red with clear logs — but a *shallow-but-valid* PR will pass
+  validation, which is why the review checklist above exists.
+
+### Other constraints
+
+- Free OpenRouter models are shared pools: upstream 429s and catalog removals
+  happen without notice. The model fallback chain + backoff absorbs most of it,
+  but a congested hour can still fail a run (re-run from the Actions tab).
+- The agent only reacts to `java-component/src/main/**/*.java` changes — behavior
+  driven from config files (`application.yml`, SQL, properties) is invisible to it.
+- Step matching supports the common cucumber-expression syntax; custom parameter
+  types match loosely, so a wrong-format argument reaches the PR check.
+- One component per repo as wired; multiple components would need per-component
+  workflow paths and prompts.
