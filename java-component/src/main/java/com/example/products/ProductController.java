@@ -20,9 +20,11 @@ import java.util.List;
 public class ProductController {
 
     private final ProductService productService;
+    private final OrderService orderService;
 
-    public ProductController(ProductService productService) {
+    public ProductController(ProductService productService, OrderService orderService) {
         this.productService = productService;
+        this.orderService = orderService;
     }
 
     @GetMapping
@@ -50,6 +52,10 @@ public class ProductController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteProduct(@PathVariable Long id) {
+        // Referential integrity: a product that has orders cannot be removed.
+        if (orderService.hasOrdersForProduct(id)) {
+            throw new ProductHasOrdersException(id);
+        }
         productService.delete(id);
         return ResponseEntity.noContent().build();
     }

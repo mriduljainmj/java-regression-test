@@ -49,6 +49,10 @@ public class OrderService {
         return order;
     }
 
+    public boolean hasOrdersForProduct(Long productId) {
+        return store.values().stream().anyMatch(o -> o.getProductId().equals(productId));
+    }
+
     public Order findById(Long id) {
         Order order = store.get(id);
         if (order == null) {
