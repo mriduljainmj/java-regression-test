@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size;
 public class ReviewRequest {
 
     @NotNull(message = "rating is required")
-    @Min(value = 2, message = "rating must be at least 2")
+    @Min(value = 3, message = "rating must be at least 3")
     @Max(value = 5, message = "rating must not exceed 5")
     private Integer rating;
 
