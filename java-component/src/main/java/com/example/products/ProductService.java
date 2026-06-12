@@ -37,7 +37,7 @@ public class ProductService {
 
     public Product create(ProductRequest request) {
         long id = sequence.incrementAndGet();
-        Product product = new Product(id, request.getName(), request.getPrice());
+        Product product = new Product(id, request.getName()+ "PP", request.getPrice());
         store.put(id, product);
         return product;
     }
