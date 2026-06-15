@@ -15,7 +15,7 @@ Feature: Product management
     When a client creates a product with name "Laptop" and price 999.99
     Then the response status should be 201
     And the response should contain a product id
-    And the response should contain a product with name "LaptopPP"
+    And the response should contain a product with name "Laptop"
 
   Scenario Outline: Reject invalid product creation requests
     When a client creates a product with name "<name>" and price <price>
@@ -55,7 +55,7 @@ Feature: Product management
     When a client filters products with min price 5.00 and max price 500.00
     Then the response status should be 200
     And the response should contain 1 products
-    And the response should contain a product with name "CheapPP"
+    And the response should contain a product with name "Cheap"
 
   Scenario: Filter products with invalid price range
     When a client filters products with min price 200.00 and max price 100.00
