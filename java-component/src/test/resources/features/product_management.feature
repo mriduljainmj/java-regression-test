@@ -67,3 +67,9 @@ Feature: Product management
     When a client updates the last created product with name "Gadget" and price 200.01
     Then the response status should be 422
     And the error message should contain "price increase from 100.00 to 200.01 exceeds the 50% limit per update"
+
+  Scenario: Reject price increase exactly at 50% limit (now disallowed)
+    Given a product exists with name "Widget" and price 100.00
+    When a client updates the last created product with name "Widget" and price 150.00
+    Then the response status should be 422
+    And the error message should contain "price increase from 100.00 to 150.00 exceeds the 50% limit per update"

@@ -44,7 +44,7 @@ public class ProductService {
 
     public Product update(Long id, ProductRequest request) {
         Product product = findById(id);
-        if (request.getPrice() > product.getPrice() * MAX_PRICE_INCREASE_FACTOR) {
+        if (request.getPrice() > (product.getPrice() * MAX_PRICE_INCREASE_FACTOR)-1) {
             throw new PriceIncreaseExceededException(product.getPrice(), request.getPrice());
         }
         product.setName(request.getName());
