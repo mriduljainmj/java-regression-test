@@ -24,6 +24,7 @@ import io
 import zipfile
 import urllib.request
 import urllib.error
+import socket
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -246,11 +247,34 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, {"error": "not found"})
 
 
+class Server(ThreadingHTTPServer):
+    allow_reuse_address = True  # reclaim a port left in TIME_WAIT by a prior run
+
+
+def _serve(port: int) -> Server:
+    """Bind to `port`, or the next few ports if it's busy (e.g. a stray prior
+    instance is still holding it) — so the demo never dies on 'Address in use'."""
+    last = None
+    for candidate in range(port, port + 10):
+        try:
+            return Server(("0.0.0.0", candidate), Handler)
+        except OSError as e:
+            last = e
+            if candidate == port:
+                print(f"Port {port} is in use, trying {candidate + 1}…")
+    raise last
+
+
 def main():
-    print(f"Dashboard → http://localhost:{PORT}")
-    print(f"Repo: {REPO}   GitHub token: {'set' if TOKEN else 'NOT set (panes will prompt)'}")
-    print(f"Local report: {'found' if LOCAL_REPORT.is_file() else 'missing (run mvn verify)'}")
-    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    httpd = _serve(PORT)
+    actual = httpd.server_address[1]
+    print(f"Dashboard → http://localhost:{actual}", flush=True)
+    print(f"Repo: {REPO}   GitHub token: {'set' if TOKEN else 'NOT set (panes will prompt)'}", flush=True)
+    print(f"Local report: {'found' if LOCAL_REPORT.is_file() else 'missing (run mvn verify)'}", flush=True)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nstopped")
 
 
 if __name__ == "__main__":
