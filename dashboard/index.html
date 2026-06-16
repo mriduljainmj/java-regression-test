@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test-Gen Pipeline Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --border: #2a2f3a;
+    --text: #e6e9ef; --muted: #8b93a3; --accent: #4f8cff;
+    --pass: #3fb950; --fail: #f85149; --skip: #d29922; --run: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  header {
+    display: flex; align-items: center; gap: 16px; padding: 14px 22px;
+    background: var(--panel); border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  .repo { color: var(--muted); font-size: 13px; }
+  .refresh { margin-left: auto; color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pass); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 22px; align-items: start; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .panel > h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted);
+    margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel2);
+  }
+  .body { max-height: 78vh; overflow-y: auto; }
+
+  /* Runs */
+  .run { border-bottom: 1px solid var(--border); }
+  .run-head { display: flex; align-items: center; gap: 10px; padding: 11px 16px; cursor: pointer; }
+  .run-head:hover { background: var(--panel2); }
+  .run-title { font-weight: 500; }
+  .run-meta { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+  .b-pass { background: rgba(63,185,80,.15); color: var(--pass); }
+  .b-fail { background: rgba(248,81,73,.15); color: var(--fail); }
+  .b-run  { background: rgba(88,166,255,.15); color: var(--run); }
+  .b-skip { background: rgba(210,153,34,.15); color: var(--skip); }
+  .jobs { padding: 4px 16px 12px 40px; display: none; }
+  .run.open .jobs { display: block; }
+  .job-name { font-weight: 500; margin: 10px 0 4px; }
+  .step { display: flex; align-items: center; gap: 8px; padding: 3px 0; color: var(--muted); font-size: 13px; }
+  .ico { width: 15px; text-align: center; flex: none; }
+  .i-pass { color: var(--pass); } .i-fail { color: var(--fail); }
+  .i-run { color: var(--run); } .i-skip { color: var(--muted); }
+  .dur { margin-left: auto; font-size: 11px; color: var(--muted); }
+
+  /* Tests */
+  .summary { display: flex; gap: 18px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .stat { display: flex; align-items: baseline; gap: 6px; }
+  .stat b { font-size: 20px; } .stat span { color: var(--muted); font-size: 12px; }
+  .source { padding: 6px 16px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--border); }
+  .feature { border-bottom: 1px solid var(--border); }
+  .feature > h3 { margin: 0; padding: 10px 16px; font-size: 13px; background: var(--panel2); }
+  .scn { display: flex; align-items: center; gap: 10px; padding: 7px 16px 7px 26px; }
+  .scn:hover { background: var(--panel2); }
+  .scn-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .scn .err { color: var(--fail); font-size: 11px; margin-left: 6px; }
+  .empty { padding: 26px; text-align: center; color: var(--muted); }
+  .empty code { background: var(--panel2); padding: 2px 6px; border-radius: 4px; }
+  a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧪 Test-Gen Pipeline</h1>
+  <span class="repo" id="repo">…</span>
+  <span class="refresh"><span class="dot"></span> auto-refresh 5s</span>
+</header>
+<main>
+  <section class="panel">
+    <h2>GitHub Actions — pipeline steps</h2>
+    <div class="body" id="runs"><div class="empty">loading…</div></div>
+  </section>
+  <section class="panel">
+    <h2>Cucumber regression — scenarios</h2>
+    <div class="body" id="tests"><div class="empty">loading…</div></div>
+  </section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let openRuns = new Set();           // remember which runs are expanded
+let activeResultsRun = null;        // which run's results are shown on the right
+
+const ICON = { passed:["i-pass","✓"], success:["i-pass","✓"], completed:["i-pass","✓"],
+  failure:["i-fail","✕"], failed:["i-fail","✕"], in_progress:["i-run","●"],
+  queued:["i-skip","○"], skipped:["i-skip","–"], null:["i-skip","○"] };
+const ico = (s) => ICON[s] || ["i-skip","○"];
+
+function badge(run) {
+  if (run.status !== "completed") return `<span class="badge b-run">${run.status}</span>`;
+  const c = run.conclusion;
+  const cls = c === "success" ? "b-pass" : c === "failure" ? "b-fail" : "b-skip";
+  return `<span class="badge ${cls}">${c}</span>`;
+}
+const fmtTime = (a,b) => (a&&b) ? Math.round((new Date(b)-new Date(a))/1000)+"s" : "";
+
+async function get(url) { const r = await fetch(url); return r.json(); }
+
+async function loadConfig() {
+  const c = await get("/api/config");
+  $("#repo").textContent = c.repo + (c.has_token ? "" : "  · no GITHUB_TOKEN");
+}
+
+async function loadRuns() {
+  const data = await get("/api/runs");
+  const el = $("#runs");
+  if (data.needs_token) {
+    el.innerHTML = `<div class="empty">Set <code>GITHUB_TOKEN</code> and restart to see live pipeline runs.<br>
+      The test pane on the right works from the local report regardless.</div>`;
+    return;
+  }
+  if (data.error) { el.innerHTML = `<div class="empty">${data.error}</div>`; return; }
+  if (!data.length) { el.innerHTML = `<div class="empty">No workflow runs yet.</div>`; return; }
+
+  el.innerHTML = data.map(r => `
+    <div class="run ${openRuns.has(r.id)?'open':''}" data-id="${r.id}">
+      <div class="run-head">
+        <span class="run-title">${r.workflow||r.name}</span>
+        ${badge(r)}
+        <span class="run-meta">#${r.run_number} · ${r.branch} · ${r.event}
+          · <a href="${r.html_url}" target="_blank">GitHub ↗</a></span>
+      </div>
+      <div class="jobs" id="jobs-${r.id}">${openRuns.has(r.id)?'loading…':''}</div>
+    </div>`).join("");
+
+  el.querySelectorAll(".run-head").forEach(h => h.onclick = (e) => {
+    if (e.target.tagName === "A") return;
+    const run = h.parentElement, id = +run.dataset.id;
+    run.classList.toggle("open");
+    if (run.classList.contains("open")) { openRuns.add(id); loadJobs(id); showResults(id); }
+    else openRuns.delete(id);
+  });
+  // keep expanded runs fresh
+  openRuns.forEach(id => { if (el.querySelector(`[data-id="${id}"]`)) loadJobs(id); });
+}
+
+async function loadJobs(runId) {
+  const data = await get(`/api/runs/${runId}/jobs`);
+  const box = $(`#jobs-${runId}`); if (!box) return;
+  if (data.error) { box.innerHTML = `<div class="step">${data.error}</div>`; return; }
+  box.innerHTML = data.map(j => {
+    const [jc, ji] = ico(j.conclusion || j.status);
+    return `<div class="job-name"><span class="ico ${jc}">${ji}</span> ${j.name}
+      <span class="dur">${fmtTime(j.started_at,j.completed_at)}</span></div>` +
+      j.steps.map(s => {
+        const [c,i] = ico(s.conclusion || s.status);
+        return `<div class="step"><span class="ico ${c}">${i}</span>${s.name}
+          <span class="dur">${fmtTime(s.started_at,s.completed_at)}</span></div>`;
+      }).join("");
+  }).join("");
+}
+
+function renderResults(data) {
+  const el = $("#tests");
+  if (data.error) { el.innerHTML = `<div class="empty">${data.error}</div>`; return; }
+  if (!data.total) {
+    el.innerHTML = `<div class="empty">No scenarios. Run <code>mvn -f java-component/pom.xml verify</code>
+      to generate the local report.</div>`; return;
+  }
+  const t = data.totals;
+  el.innerHTML = `
+    <div class="summary">
+      <div class="stat"><b style="color:var(--pass)">${t.passed||0}</b><span>passed</span></div>
+      <div class="stat"><b style="color:var(--fail)">${t.failed||0}</b><span>failed</span></div>
+      <div class="stat"><b style="color:var(--skip)">${t.skipped||0}</b><span>skipped</span></div>
+      <div class="stat"><b>${data.total}</b><span>total</span></div>
+    </div>
+    <div class="source">source: ${data.source||""}</div>` +
+    data.features.map(f => `
+      <div class="feature">
+        <h3>${f.name}</h3>
+        ${f.scenarios.map(s => { const [c,i] = ico(s.status); return `
+          <div class="scn">
+            <span class="ico ${c}">${i}</span>
+            <span class="scn-name">${s.name}
+              ${s.failed_step?`<span class="err">↳ ${s.failed_step}</span>`:''}</span>
+            <span class="dur">${s.duration_ms}ms</span>
+          </div>`; }).join("")}
+      </div>`).join("");
+}
+
+async function showResults(runId) {        // results for a specific run (artifact)
+  activeResultsRun = runId;
+  renderResults(await get(`/api/runs/${runId}/results`));
+}
+async function loadLocalResults() {         // default view: local report
+  if (activeResultsRun === null) renderResults(await get("/api/results"));
+}
+
+async function tick() { await loadRuns(); await loadLocalResults(); }
+
+loadConfig();
+tick();
+setInterval(tick, 5000);
+</script>
+</body>
+</html>
