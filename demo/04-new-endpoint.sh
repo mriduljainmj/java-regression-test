@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.."
 SVC="java-component/src/main/java/com/example/products/OrderService.java"
 CTL="java-component/src/main/java/com/example/products/OrderController.java"
 
-python3 - <<PY
+python - <<PY
 from pathlib import Path
 
 svc = Path("$SVC"); s = svc.read_text()

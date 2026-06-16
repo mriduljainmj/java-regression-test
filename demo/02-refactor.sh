@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 
 FILE="java-component/src/main/java/com/example/products/OrderService.java"
 
-python3 - <<PY
+python - <<PY
 from pathlib import Path
 p = Path("$FILE")
 s = p.read_text()
