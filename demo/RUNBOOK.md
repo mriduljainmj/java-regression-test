@@ -60,10 +60,29 @@ spam you with tests for a refactor.
 
 ## Segment C (optional finale) — "it writes its own test code"
 
-Only if you pre-verified it this morning. Add a brand-new endpoint with no
-matching step definition; the agent proposes a Java `STEPDEF` block (new glue
-using `TestContext`) plus scenarios. Higher variance — keep the merged review-API
-PR open in a tab as a backup to show the result if the live run wobbles.
+```bash
+./demo/04-new-endpoint.sh          # adds GET /api/v1/orders (list all orders)
+git push
+```
+
+Adds a brand-new endpoint with **no** matching step definition, so the agent must
+propose a Java `STEPDEF` block (new glue using `TestContext`) plus scenarios that
+list orders.
+
+**Say:** "I added a list-all-orders endpoint and wrote zero test code. Watch the
+agent write its own step definitions." When the PR lands, open the
+`STEPDEF`/`*StepDefinitions.java` file in the diff and show the glue it wrote.
+
+**Verified deterministically** (foundation, not the live model output):
+- compiles and the existing suite stays green with the endpoint added;
+- a natural "list all orders" scenario matches **none** of the 36 existing step
+  patterns → the agent is forced into glue generation, which is the point.
+
+**Higher LLM variance** than A/B/D — the *quality* of the generated glue isn't
+guaranteed. Rehearse with one real push this morning, and keep the merged
+review-API PR open in a tab as a backup to show a known-good generated-glue
+result if the live run wobbles. If the PR's regression check is red, that's the
+honest story too: "the gate caught imperfect generation before merge."
 
 ---
 
