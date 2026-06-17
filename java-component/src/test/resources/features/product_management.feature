@@ -27,6 +27,7 @@ Feature: Product management
       |        | 9.99  | name must not be blank          |
       | Laptop | 0     | price must be greater than zero |
       | Laptop | -5.00 | price must be greater than zero |
+      | Laptop | 100001.00 | price must not exceed 100000.00 |
 
   Scenario: Retrieve a product that does not exist
     When a client requests the product with id 9999
@@ -38,6 +39,18 @@ Feature: Product management
     When a client updates the last created product with name "Gaming Laptop" and price 1299.99
     Then the response status should be 200
     And the response should contain a product with name "Gaming Laptop"
+
+  Scenario Outline: Reject invalid product update requests
+    When a client updates the product with id <id> with name "<name>" and price <price>
+    Then the response status should be 400
+    And the error message should contain "<message>"
+
+    Examples:
+      | id | name   | price | message                         |
+      | 1  |        | 9.99  | name must not be blank          |
+      | 1  | Laptop | 0     | price must be greater than zero |
+      | 1  | Laptop | -5.00 | price must be greater than zero |
+      | 1  | Laptop | 100001.00 | price must not exceed 100000.00 |
 
   Scenario: Delete an existing product
     Given a product exists with name "Laptop" and price 999.99
