@@ -17,17 +17,23 @@ Feature: Product management
     And the response should contain a product id
     And the response should contain a product with name "Laptop"
 
+  Scenario: Create a product with a price up to the new maximum
+    When a client creates a product with name "SuperComputer" and price 199999.99
+    Then the response status should be 201
+    And the response should contain a product id
+    And the response should contain a product with name "SuperComputer"
+
   Scenario Outline: Reject invalid product creation requests
     When a client creates a product with name "<name>" and price <price>
     Then the response status should be 400
     And the error message should contain "<message>"
 
     Examples:
-      | name   | price | message                         |
-      |        | 9.99  | name must not be blank          |
-      | Laptop | 0     | price must be greater than zero |
-      | Laptop | -5.00 | price must be greater than zero |
-      | Laptop | 100001.00 | price must not exceed 100000.00 |
+      | name   | price      | message                                 |
+      |        | 9.99       | name must not be blank                  |
+      | Laptop | 0          | price must be greater than zero         |
+      | Laptop | -5.00      | price must be greater than zero         |
+      | Laptop | 100001.00  | price must not exceed 200000.00         |
 
   Scenario: Retrieve a product that does not exist
     When a client requests the product with id 9999
@@ -46,11 +52,11 @@ Feature: Product management
     And the error message should contain "<message>"
 
     Examples:
-      | id | name   | price | message                         |
-      | 1  |        | 9.99  | name must not be blank          |
-      | 1  | Laptop | 0     | price must be greater than zero |
-      | 1  | Laptop | -5.00 | price must be greater than zero |
-      | 1  | Laptop | 100001.00 | price must not exceed 100000.00 |
+      | id | name   | price      | message                                 |
+      | 1  |        | 9.99       | name must not be blank                  |
+      | 1  | Laptop | 0          | price must be greater than zero         |
+      | 1  | Laptop | -5.00      | price must be greater than zero         |
+      | 1  | Laptop | 100001.00  | price must not exceed 200000.00         |
 
   Scenario: Delete an existing product
     Given a product exists with name "Laptop" and price 999.99
