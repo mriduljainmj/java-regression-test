@@ -16,7 +16,7 @@ public class OrderService {
     private static final double SMALL_TIER_DISCOUNT = 0.05;
 
     // Orders above this total (after discount) are rejected.
-    private static final double MAX_ORDER_TOTAL = 5000.00;
+    private static final double ORDER_TOTAL_CAP = 5000.00;
 
     private final ProductService productService;
     private final Map<Long, Order> store = new ConcurrentHashMap<>();
@@ -38,7 +38,7 @@ public class OrderService {
         }
 
         double total = round2(product.getPrice() * quantity * (1 - discount));
-        if (total > MAX_ORDER_TOTAL) {
+        if (total > ORDER_TOTAL_CAP) {
             throw new OrderLimitExceededException(total);
         }
 
