@@ -14,6 +14,8 @@ public class OrderRequest {
     @Max(value = 100, message = "quantity must not exceed 100")
     private Integer quantity;
 
+    private boolean loyaltyMember;
+
     public Long getProductId() {
         return productId;
     }
@@ -28,5 +30,13 @@ public class OrderRequest {
 
     public void setQuantity(Integer quantity) {
         this.quantity = quantity;
+    }
+
+    public boolean isLoyaltyMember() {
+        return loyaltyMember;
+    }
+
+    public void setLoyaltyMember(boolean loyaltyMember) {
+        this.loyaltyMember = loyaltyMember;
     }
 }

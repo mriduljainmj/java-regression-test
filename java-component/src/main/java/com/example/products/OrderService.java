@@ -14,6 +14,8 @@ public class OrderService {
     private static final int SMALL_TIER_QUANTITY = 10;
     private static final double LARGE_TIER_DISCOUNT = 0.10;
     private static final double SMALL_TIER_DISCOUNT = 0.05;
+    // Loyalty members get an extra 10% that STACKS multiplicatively.
+    private static final double LOYALTY_DISCOUNT = 0.10;
 
     // Orders above this total (after discount) are rejected.
     private static final double ORDER_TOTAL_CAP = 5000.00;
