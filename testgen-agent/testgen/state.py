@@ -65,6 +65,12 @@ class TestGenState(TypedDict, total=False):
     validation_errors: list[str]
     attempts: int
 
+    # Execution-feedback loop: run the generated tests, feed failures back
+    test_failures: list[str]
+    test_attempts: int
+    tests_passed: bool
+    test_report: Optional[str]  # human-readable note shown in the PR body
+
     # Outputs
     written_files: list[str]
     pr_url: Optional[str]

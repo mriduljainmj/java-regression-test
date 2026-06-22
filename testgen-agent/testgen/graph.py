@@ -4,20 +4,27 @@
          │
          ▼
     gather_context ──▶ generate_tests ──▶ validate_output
-                            ▲                   │
-                            │ (errors,          │ (clean, or out of retries)
-                            │  retries left)    ▼
-                            └────────── write_features ──▶ create_pull_request ──▶ END
+                            ▲   ▲              │
+              (structural ──┘   │              │ (structurally clean)
+               errors,          │              ▼
+               retries left)    │         write_features ──▶ run_generated_tests
+                                │                                   │
+              (tests failed, ───┘                                   │
+               attempts left)                    (pass, or out of test retries)
+                                                                    ▼
+                                                          create_pull_request ──▶ END
 """
 
 from langgraph.graph import END, StateGraph
 
 from .nodes import (
     MAX_ATTEMPTS,
+    MAX_TEST_ATTEMPTS,
     collect_diff,
     create_pull_request,
     gather_context,
     generate_tests,
+    run_generated_tests,
     validate_output,
     write_features,
 )
@@ -41,7 +48,13 @@ def _after_validate(state: TestGenState) -> str:
     return "write_features"
 
 
-def _after_write(state: TestGenState) -> str:
+def _after_run_tests(state: TestGenState) -> str:
+    """Pass → open the PR. Fail with retries left → regenerate from the failure
+    feedback. Fail and out of retries → open the PR anyway, flagged as failing
+    (don't lose the work; the human + the PR's own regression check take over)."""
+    if not state.get("tests_passed", True):
+        if state.get("test_attempts", 0) < MAX_TEST_ATTEMPTS:
+            return "generate_tests"
     return "create_pull_request" if state.get("create_pr") else END
 
 
@@ -53,6 +66,7 @@ def build_graph():
     graph.add_node("generate_tests", generate_tests)
     graph.add_node("validate_output", validate_output)
     graph.add_node("write_features", write_features)
+    graph.add_node("run_generated_tests", run_generated_tests)
     graph.add_node("create_pull_request", create_pull_request)
 
     graph.set_entry_point("collect_diff")
@@ -60,7 +74,8 @@ def build_graph():
     graph.add_edge("gather_context", "generate_tests")
     graph.add_edge("generate_tests", "validate_output")
     graph.add_conditional_edges("validate_output", _after_validate)
-    graph.add_conditional_edges("write_features", _after_write)
+    graph.add_edge("write_features", "run_generated_tests")
+    graph.add_conditional_edges("run_generated_tests", _after_run_tests)
     graph.add_edge("create_pull_request", END)
 
     return graph.compile()

@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -17,13 +18,25 @@ from .prompts import (
     OUTPUT_FORMAT_INSTRUCTIONS,
     RETRY_SUFFIX_TEMPLATE,
     SYSTEM_PROMPT,
+    TEST_FAILURE_TEMPLATE,
     USER_PROMPT_TEMPLATE,
 )
 from .state import FeatureFile, GenerationResult, StepDefinitionFile, TestGenState
 
 logger = logging.getLogger(__name__)
 
-MAX_ATTEMPTS = int(os.environ.get("TESTGEN_MAX_ATTEMPTS", "4"))
+# Safety cap on total model calls (structural retries + rotation). Set high
+# enough that the execution-feedback rounds below never trip it.
+MAX_ATTEMPTS = int(os.environ.get("TESTGEN_MAX_ATTEMPTS", "6"))
+
+# Execution-feedback loop: run the generated tests and feed failures back to the
+# model, at most this many times (the user-facing "max 3 retries").
+MAX_TEST_ATTEMPTS = int(os.environ.get("TESTGEN_MAX_TEST_ATTEMPTS", "3"))
+
+# Maven command + the component to test. Override MAVEN_CMD if mvn isn't on PATH.
+MVN = os.environ.get("MAVEN_CMD", "mvn")
+COMPONENT_DIR = os.environ.get("TESTGEN_COMPONENT_DIR", "java-component")
+TEST_TIMEOUT = int(os.environ.get("TESTGEN_TEST_TIMEOUT", "900"))
 
 # Per-section guardrail for very large diffs/sources. ~15K tokens per section —
 # comfortably inside the 131K-token windows of the free models below, but large
@@ -324,6 +337,12 @@ def generate_tests(state: TestGenState) -> TestGenState:
         errors = "\n".join(f"- {e}" for e in state["validation_errors"])
         user_prompt += RETRY_SUFFIX_TEMPLATE.format(errors=errors)
 
+    # Runtime failures from a prior `mvn test` — the strongest signal we have,
+    # because it reflects how the tests actually behave against the real code.
+    if state.get("test_failures"):
+        failures = "\n".join(state["test_failures"])
+        user_prompt += TEST_FAILURE_TEMPLATE.format(failures=failures)
+
     full_prompt = f"""
     {SYSTEM_PROMPT}
 
@@ -535,6 +554,108 @@ def write_features(state: TestGenState) -> TestGenState:
     return {"written_files": written}
 
 
+def _extract_compile_errors(mvn_output: str) -> list:
+    """Pull Java compiler errors out of mvn output (build failed before tests)."""
+    errors = []
+    for line in mvn_output.splitlines():
+        # e.g. "[ERROR] /path/Foo.java:[12,34] cannot find symbol"
+        if ".java:[" in line and "ERROR" in line:
+            errors.append(line.split("ERROR]", 1)[-1].strip())
+    return errors[:25]
+
+
+def _extract_scenario_failures(repo: Path) -> list:
+    """Parse the Cucumber JSON report for failed scenarios + the reason."""
+    report_path = repo / COMPONENT_DIR / "target" / "cucumber-report.json"
+    if not report_path.is_file():
+        return []
+    try:
+        report = json.loads(_read(report_path))
+    except (ValueError, OSError):
+        return []
+
+    failures = []
+    for feature in report:
+        background = []
+        for el in feature.get("elements", []):
+            steps = el.get("steps", [])
+            if el.get("type") == "background":
+                background = steps
+                continue
+            for step in background + steps:
+                res = step.get("result", {})
+                if res.get("status") in ("failed", "undefined", "pending", "ambiguous"):
+                    why = res.get("error_message", res.get("status", "")).splitlines()
+                    failures.append(
+                        f'- [{feature.get("name")}] "{el.get("name")}" → '
+                        f'step "{step.get("keyword","").strip()} {step.get("name")}" '
+                        f'{res.get("status")}: {why[0] if why else ""}'
+                    )
+                    break  # one failure per scenario is enough signal
+    return failures
+
+
+def run_generated_tests(state: TestGenState) -> TestGenState:
+    """Run `mvn test` on the written tests; on failure, capture *why* (compile
+    errors and per-scenario failures) so the model can correct itself.
+
+    Skips gracefully (tests_passed=True) when there's nothing to run or Maven
+    isn't available, so the agent still works in a Maven-less environment — just
+    without execution feedback."""
+    repo = Path(state["repo_path"]).resolve()  # absolute, so mvn -f and cwd agree
+
+    if not state.get("written_files"):
+        return {"tests_passed": True, "test_failures": [],
+                "test_report": "no files written; nothing to run"}
+
+    if shutil.which(MVN) is None:
+        logger.warning("'%s' not found on PATH — skipping test execution", MVN)
+        return {"tests_passed": True, "test_failures": [],
+                "test_report": "test execution skipped (Maven not available in this environment)"}
+
+    pom = str(repo / COMPONENT_DIR / "pom.xml")
+    logger.info("Running generated tests: %s -B -f %s test", MVN, pom)
+    proc = subprocess.run(
+        [MVN, "-B", "-f", pom, "test"],
+        cwd=str(repo), capture_output=True, text=True, timeout=TEST_TIMEOUT,
+    )
+
+    if proc.returncode == 0:
+        logger.info("Generated tests passed.")
+        return {"tests_passed": True, "test_failures": [],
+                "test_report": "all generated tests passed"}
+
+    test_attempts = state.get("test_attempts", 0) + 1
+    output = proc.stdout + "\n" + proc.stderr
+
+    compile_errors = _extract_compile_errors(output)
+    scenario_failures = _extract_scenario_failures(repo)
+
+    feedback: list = []
+    if compile_errors:
+        feedback.append("COMPILATION ERROR (the generated Java does not compile):")
+        feedback += [f"- {e}" for e in compile_errors]
+    if scenario_failures:
+        feedback.append("SCENARIO FAILURES:")
+        feedback += scenario_failures
+    if not feedback:
+        # mvn failed for some other reason — hand back the tail so it's not opaque.
+        tail = "\n".join(output.splitlines()[-25:])
+        feedback.append("`mvn test` failed; tail of the output:\n" + tail)
+
+    logger.warning("Test attempt %d failed (%d compile, %d scenario)",
+                   test_attempts, len(compile_errors), len(scenario_failures))
+    return {
+        "tests_passed": False,
+        "test_attempts": test_attempts,
+        "test_failures": feedback,
+        "test_report": f"{len(scenario_failures)} scenario failure(s), "
+                       f"{len(compile_errors)} compile error(s) on attempt {test_attempts}",
+        # Clear structural errors so the next generate uses the test feedback.
+        "validation_errors": [],
+    }
+
+
 def create_pull_request(state: TestGenState) -> TestGenState:
     """Commit the generated features on a new branch and open a PR via the gh CLI."""
     repo = state["repo_path"]
@@ -563,9 +684,27 @@ def create_pull_request(state: TestGenState) -> TestGenState:
         _run(["git", "push", "-u", "origin", branch], cwd=repo)
 
         endpoints = "\n".join(f"- `{e}`" for e in generation.impacted_endpoints) or "- none"
+
+        tests_passed = state.get("tests_passed", True)
+        if tests_passed:
+            title = "test: update Cucumber regression suite for latest code changes"
+            status = f"✅ Generated tests **passed** locally ({state.get('test_report','')})."
+        else:
+            title = "test: update Cucumber suite (⚠️ still failing — needs review)"
+            failures = "\n".join(state.get("test_failures", []))
+            status = (
+                f"⚠️ Generated tests **still failing** after "
+                f"{state.get('test_attempts', 0)} self-correction attempt(s). "
+                "A human needs to resolve these — the most likely cause is the model "
+                "asserting a wrong expected value, or the change being too large for "
+                "one pass.\n\n<details><summary>Remaining failures</summary>\n\n"
+                f"```\n{failures}\n```\n</details>"
+            )
+
         body = (
             "## Auto-generated regression tests\n\n"
             f"{generation.analysis_summary}\n\n"
+            f"### Test status\n{status}\n\n"
             f"### Impacted endpoints\n{endpoints}\n\n"
             f"### Files\n" + "\n".join(f"- `{f}`" for f in state["written_files"]) + "\n\n"
             "Please review the scenarios before merging. Regression runs automatically "
@@ -573,10 +712,7 @@ def create_pull_request(state: TestGenState) -> TestGenState:
             "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
         )
         pr_url = _run(
-            ["gh", "pr", "create",
-             "--title", "test: update Cucumber regression suite for latest code changes",
-             "--body", body,
-             "--head", branch],
+            ["gh", "pr", "create", "--title", title, "--body", body, "--head", branch],
             cwd=repo,
         ).strip()
         logger.info("Opened PR: %s", pr_url)

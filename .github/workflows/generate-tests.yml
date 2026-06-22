@@ -32,6 +32,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      # The agent runs `mvn test` on what it generates and self-corrects from
+      # the failures, so the job needs a JDK + Maven too.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
       - name: Install agent dependencies
         run: pip install -r testgen-agent/requirements.txt
 

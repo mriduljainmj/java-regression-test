@@ -171,3 +171,25 @@ coverage to make the errors go away — rephrase steps to match existing pattern
 or add the missing step definitions:
 {errors}
 """
+
+TEST_FAILURE_TEMPLATE = """\
+
+[PREVIOUS TESTS FAILED WHEN EXECUTED]
+Your generated tests were written to disk and run with `mvn test`. They FAILED.
+Below is exactly why. Return the corrected, COMPLETE set of files again.
+
+How to read this and fix it:
+- "COMPILATION ERROR" means your Java step-definition code does not compile —
+  fix the Java (imports, types, method signatures, use the TestContext bean for
+  shared state). Return the full corrected .java file.
+- A scenario failure like "Expected status code <201> but was <400>" means your
+  EXPECTED value is wrong, not the code — read the component source again and
+  correct the assertion (status code, error message, computed total, boundary
+  side) to match what the code actually does. Do NOT change the code; the code
+  is the source of truth.
+- An "undefined step" means a step has no matching glue — add the step definition
+  or rephrase to an existing one.
+
+Failures:
+{failures}
+"""

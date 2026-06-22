@@ -4,8 +4,10 @@ from .nodes import (
     generate_tests,
     validate_output,
     write_features,
+    run_generated_tests,
     create_pull_request,
     MAX_ATTEMPTS,
+    MAX_TEST_ATTEMPTS,
 )
 from .graph import build_graph
 from .state import TestGenState
@@ -16,8 +18,10 @@ __all__ = [
     "generate_tests",
     "validate_output",
     "write_features",
+    "run_generated_tests",
     "create_pull_request",
     "build_graph",
     "TestGenState",
     "MAX_ATTEMPTS",
+    "MAX_TEST_ATTEMPTS",
 ]

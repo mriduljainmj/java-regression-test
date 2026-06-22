@@ -75,9 +75,20 @@ LangGraph state machine:
   Outline steps are checked with **every** Examples row substituted (catches `null`
   in an `{int}` column). Exact offending steps are fed back to the model, up to
   `TESTGEN_MAX_ATTEMPTS` (default 4) attempts.
+- **run_generated_tests** — runs `mvn test` on what was just written. On failure
+  it parses **both** Java compile errors and per-scenario Cucumber failures
+  (feature → scenario → failing step → assertion message) and feeds them back to
+  `generate_tests`, looping up to `TESTGEN_MAX_TEST_ATTEMPTS` (default 3) times.
+  This is the execution-feedback loop: it catches the *semantic* errors static
+  validation can't — a wrong expected value, a miscomputed total, glue that
+  doesn't compile. Skips gracefully (no blocking) if Maven isn't on PATH, so the
+  agent still runs in a Maven-less environment, just without this loop.
 - **write_features / create_pull_request** — writes files (skipping content-identical
-  ones), commits to a `testgen/...` branch, opens the PR via `gh`. If nothing
-  effectively changed, no PR is opened.
+  ones), commits to a `testgen/...` branch, opens the PR via `gh`. The PR body
+  reports the test status; if the suite still fails after 3 self-correction
+  rounds the PR is opened anyway, **flagged as failing** with the remaining
+  failures, so the work isn't lost and a human (plus the PR's own regression
+  check) takes over. If nothing effectively changed, no PR is opened.
 
 ### Generated Java glue
 
@@ -100,8 +111,11 @@ files in `STEPDEF` blocks. Guard rails:
 | `OPENROUTER_API_KEY` | — | required |
 | `TESTGEN_MODEL` | `openai/gpt-oss-120b:free` | first model in the fallback chain |
 | `TESTGEN_MODELS` | — | comma-separated list replacing the whole chain |
-| `TESTGEN_MAX_ATTEMPTS` | `4` | generate→validate retry budget |
+| `TESTGEN_MAX_ATTEMPTS` | `6` | generate→validate retry safety cap |
+| `TESTGEN_MAX_TEST_ATTEMPTS` | `3` | run-tests→fix retry budget |
 | `TESTGEN_MAX_CONTEXT_CHARS` | `60000` | per-section context cap |
+| `MAVEN_CMD` | `mvn` | Maven binary; loop is skipped if not found |
+| `TESTGEN_COMPONENT_DIR` | `java-component` | component whose `mvn test` runs |
 
 ### Agent tests
 
@@ -204,9 +218,13 @@ The validator guarantees *structure*, not *meaning*:
 - **Caught pre-PR**: undefined steps (no matching glue), bad Outline placeholders,
   type-incompatible Examples values, CREATE/UPDATE mismatches, glue that drops
   existing step definitions, paths outside the test tree.
-- **Caught by the PR's regression run**: Java glue that doesn't compile, scenarios
-  that fail against the real API (wrong status codes, wrong messages, broken state
-  assumptions).
+- **Caught by the execution-feedback loop** (`run_generated_tests`, before the PR):
+  Java glue that doesn't compile and scenarios that fail against the real API
+  (wrong status codes, messages, totals) — the agent runs `mvn test`, reads the
+  failures, and regenerates up to 3 times. Only failures that survive all 3 rounds
+  reach the PR (flagged as failing).
+- **Still caught by the PR's regression run** (defense in depth): anything the
+  local loop's environment didn't reproduce.
 - **Caught only by a human reviewer**: expected values that are plausible but wrong
   (a boundary on the wrong side, an approximated error message, a discount applied
   after instead of before a cap), missing coverage, and tests that "bless" an
