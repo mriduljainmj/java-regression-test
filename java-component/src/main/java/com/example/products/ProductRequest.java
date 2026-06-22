@@ -14,7 +14,7 @@ public class ProductRequest {
 
     @NotNull(message = "price is required")
     @Positive(message = "price must be greater than zero")
-    @DecimalMax(value = "200000.00", message = "price must not exceed 200000.00")
+    @DecimalMax(value = "100000.00", message = "price must not exceed 100000.00")
     private Double price;
 
     public String getName() {
