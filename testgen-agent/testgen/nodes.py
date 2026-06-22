@@ -446,10 +446,6 @@ def validate_output(state: TestGenState) -> TestGenState:
             errors.append(f"{name}: step definitions must live under {JAVA_TEST_MARKER}/")
         if not target.is_relative_to(repo):
             errors.append(f"{name}: path escapes the repository root")
-        if glue.action == "UPDATE" and not target.is_file():
-            errors.append(f"{name}: action is UPDATE but the file does not exist (use CREATE)")
-        if glue.action == "CREATE" and target.is_file():
-            errors.append(f"{name}: action is CREATE but the file already exists (use UPDATE)")
 
         patterns_in_file = extract_step_patterns(glue.java_content)
         if not patterns_in_file:
@@ -457,14 +453,19 @@ def validate_output(state: TestGenState) -> TestGenState:
                 f"{name}: contains no @Given/@When/@Then step definitions — "
                 "if no new glue is needed, return an empty new_or_modified_step_definitions list"
             )
-        if glue.action == "UPDATE" and target.is_file():
+        # The real invariant (independent of the CREATE/UPDATE label): if the file
+        # already exists, the new content must keep every step it currently has —
+        # otherwise existing scenarios break. We DON'T reject on a CREATE/UPDATE
+        # label mismatch: the model returns full content either way, and rejecting
+        # it makes the retry loop thrash once a prior attempt has written the file.
+        if target.is_file():
             removed = [
                 p for p in extract_step_patterns(_read(target))
                 if p not in patterns_in_file
             ]
             if removed:
                 errors.append(
-                    f"{name}: UPDATE removes existing step definition(s) "
+                    f"{name}: this rewrite drops existing step definition(s) "
                     f"{removed} — return the FULL file content preserving every "
                     "existing step"
                 )
@@ -487,10 +488,9 @@ def validate_output(state: TestGenState) -> TestGenState:
             errors.append(f"{name}: must live under {FEATURES_DIR_MARKER}/")
         if not target.is_relative_to(repo):
             errors.append(f"{name}: path escapes the repository root")
-        if feature.action == "UPDATE" and not target.is_file():
-            errors.append(f"{name}: action is UPDATE but the file does not exist (use CREATE)")
-        if feature.action == "CREATE" and target.is_file():
-            errors.append(f"{name}: action is CREATE but the file already exists (use UPDATE)")
+        # No CREATE/UPDATE-vs-existence check: the model returns full feature
+        # content either way, so the label is cosmetic — and rejecting on it made
+        # the retry loop thrash once an earlier attempt had written the file.
 
         lines = [line.strip() for line in feature.gherkin_content.splitlines()]
         if not any(line.startswith("Feature:") for line in lines):
@@ -539,7 +539,7 @@ def write_features(state: TestGenState) -> TestGenState:
     outputs += [(g.file_name, g.action, g.java_content)
                 for g in generation.new_or_modified_step_definitions]
 
-    for file_name, action, raw_content in outputs:
+    for file_name, _action, raw_content in outputs:
         target = repo / file_name.lstrip("./")
         target.parent.mkdir(parents=True, exist_ok=True)
         content = raw_content.replace("\r\n", "\n")
@@ -548,6 +548,8 @@ def write_features(state: TestGenState) -> TestGenState:
         if target.is_file() and _read(target) == content:
             logger.info("UNCHANGED %s (generated content identical; skipping)", file_name)
             continue
+        # Log the real action from disk state, not the model's (often wrong) label.
+        action = "UPDATE" if target.is_file() else "CREATE"
         target.write_text(content, encoding="utf-8")
         written.append(str(target.relative_to(repo)))
         logger.info("%s %s", action, file_name)

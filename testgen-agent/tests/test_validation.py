@@ -84,20 +84,44 @@ class GlueValidationTest(unittest.TestCase):
         self.assertTrue(any("matches no existing step definition" in e
                             for e in out["validation_errors"]))
 
-    def test_update_removing_existing_steps_is_flagged(self):
+    def test_rewrite_dropping_existing_steps_is_flagged(self):
+        # Whenever the file exists, dropping a step it currently has is an error —
+        # regardless of the CREATE/UPDATE label the model put on it.
         existing = self.repo / GLUE_PATH
         existing.write_text(EXISTING_GLUE)
+        for label in ("UPDATE", "CREATE"):
+            generation = GenerationResult(
+                impacted_endpoints=[], analysis_summary="x",
+                new_or_modified_features=[],
+                new_or_modified_step_definitions=[StepDefinitionFile(
+                    file_name=GLUE_PATH, action=label, java_content=NEW_GLUE,
+                )],
+            )
+            out = validate_output(make_state(self.repo, generation))
+            self.assertTrue(any("drops existing step definition" in e
+                                for e in out["validation_errors"]),
+                            f"label={label} should flag dropped steps")
+
+    def test_create_label_on_existing_file_is_not_rejected(self):
+        # Regression for the retry-loop thrash: after attempt 1 writes a feature,
+        # a later attempt that still says CREATE must NOT be rejected just for the
+        # label — only real problems (undefined steps, bad paths) should fail it.
+        existing = self.repo / FEATURE_PATH
+        existing.parent.mkdir(parents=True, exist_ok=True)
+        existing.write_text("Feature: Inventory\n  Scenario: old\n    Given the catalog is empty\n")
         generation = GenerationResult(
-            impacted_endpoints=[],
-            analysis_summary="x",
-            new_or_modified_features=[],
-            new_or_modified_step_definitions=[StepDefinitionFile(
-                file_name=GLUE_PATH, action="UPDATE", java_content=NEW_GLUE,
+            impacted_endpoints=[], analysis_summary="x",
+            new_or_modified_features=[FeatureFile(
+                file_name=FEATURE_PATH, action="CREATE",  # stale label, file exists
+                gherkin_content=(
+                    "Feature: Inventory\n  Scenario: S\n"
+                    "    Given the catalog is empty\n"
+                    "    Then the response status should be 200\n"
+                ),
             )],
         )
         out = validate_output(make_state(self.repo, generation))
-        self.assertTrue(any("removes existing step definition" in e
-                            for e in out["validation_errors"]))
+        self.assertEqual(out["validation_errors"], [])
 
     def test_glue_outside_test_sources_is_flagged(self):
         generation = GenerationResult(
