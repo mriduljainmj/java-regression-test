@@ -102,6 +102,40 @@ this is the whole point."
 
 ---
 
+## Segment E — "it runs the tests and fixes itself" (the retry loop)
+
+This is the change that makes the **generated** test fail on the first pass so you
+can show the agent self-correcting. It's **already staged as a local, unpushed
+commit** (`feat: stacking loyalty discount on orders`) on a green baseline with no
+loyalty tests yet — so you just push:
+
+```bash
+git push
+```
+
+It adds a loyalty discount that stacks **multiplicatively** on the bulk discount.
+The agent must write a scenario for it, and the canonical model mistake is to stack
+discounts **additively**:
+
+```
+50 units @ 100.00, loyalty member:
+  bulk 10% -> 4500.00, then loyalty 10% -> 4050.00   ← correct
+  naive additive 20% off -> 4000.00                  ← the wrong first guess
+```
+
+When the generated test asserts 4000.00, `mvn test` fails inside the generate-tests
+run, the failure ("Expected 4000.0 but was 4050.0") is fed back, and the agent
+regenerates — up to 3 times.
+
+**Watch the workflow log for:** `Test attempt 1 failed … Test attempt 2`. The PR
+should land green (self-corrected); worst case it opens flagged-as-failing, which is
+the honest fallback. (If you've reset past this commit, re-apply it with
+`./demo/05-loyalty-discount.sh`.)
+
+**Tip:** to make a first-pass failure near-certain, run the agent with the weaker
+model — set the `TESTGEN_MODEL=google/gemma-4-26b-a4b-it:free` repository variable
+before pushing.
+
 ## Reset between rehearsals
 
 ```bash

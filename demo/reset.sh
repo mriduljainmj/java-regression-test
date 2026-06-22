@@ -11,6 +11,7 @@ case "$msg" in
   "feat: cap product price at 100000.00"|\
   "refactor: rename order-total cap constant"|\
   "feat: list all orders via GET /api/v1/orders"|\
+  "feat: stacking loyalty discount on orders"|\
   "demo: change product-not-found message (breaks existing assertion)")
     ;;
   *)
