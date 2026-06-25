@@ -70,7 +70,8 @@ Before returning output ensure:
  - Feature files are syntactically valid Gherkin.
 
 CONSTRAINTS
- - Feature file paths should be relative to the repo root and placed under the test project's features folder (e.g. `*/Features/` or `src/test/resources/features/` depending on repository conventions). Make path configurable in the request when uncertain.
+ - Feature file paths must be relative to the repo root and placed under `dotnet-component/Tests/Features/`.
+ - Step-definition files must be placed under `dotnet-component/Tests/` and named `*StepDefinitions.cs`.
 
 DELIVERY
  - Return full `.feature` file(s) and full glue `.cs` file(s) when required.
@@ -125,19 +126,20 @@ Rules:
 
 Minimal worked example (note the "last created" idiom — no entity ids in steps):
 
-ANALYSIS: POST /api/v1/widgets/{id}/tags was added; tagging needs new glue and scenarios.
-ENDPOINTS: POST /api/v1/widgets/{id}/tags
+ANALYSIS: POST /api/products/{id}/stock was added; stock updates need new glue and scenarios.
+ENDPOINTS: PATCH /api/products/{id}/stock
 
-=== FEATURE CREATE component/Tests/Features/widget_tags.feature ===
-Feature: Widget tagging
+=== FEATURE CREATE dotnet-component/Tests/Features/product_stock.feature ===
+Feature: Product stock updates
 
-  Scenario: Tag an existing widget
-    Given a widget exists with name "Gadget"
-    When a client tags the last created widget with "sale"
-    Then the response status should be 201
+  Scenario: Update product stock status
+    Given a product exists with id 1
+    When a client PATCHes /api/products/1/stock with body
+      """
+      false
+      """
+    Then the response status should be 200
 === END ===
-
-=== STEPDEF CREATE component/Tests/StepDefinitions/TagStepDefinitions.cs ===
 using System.Net.Http;
 using System.Threading.Tasks;
 using TechTalk.SpecFlow;

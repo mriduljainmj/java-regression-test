@@ -8,6 +8,7 @@ on:
     paths:
       - "java-component/src/main/**"
       - "BP/**"
+      - "dotnet-component/**"
       - "**/*.cs"
       - "**/*.csproj"
   workflow_dispatch:
