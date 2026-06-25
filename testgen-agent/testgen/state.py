@@ -25,11 +25,14 @@ class StepDefinitionFile(BaseModel):
     """
 
     file_name: str = Field(
-        description="Path relative to the repository root, under src/test/java/, "
-        "e.g. java-component/src/test/java/com/example/products/cucumber/OrderStepDefinitions.java"
+        description="Path relative to the repository root, e.g. Tests/StepDefinitions/OrderStepDefinitions.cs or src/test/java/…/OrderStepDefinitions.java"
     )
     action: Literal["CREATE", "UPDATE"]
-    java_content: str = Field(description="Full Java source of the step-definition file")
+    content: str = Field(description="Full source of the step-definition file (C# or Java)")
+    language: Optional[Literal["java", "csharp"]] = Field(
+        default=None,
+        description="Optional language hint: 'java' or 'csharp'. If omitted, inferred from file extension."
+    )
 
 
 class GenerationResult(BaseModel):

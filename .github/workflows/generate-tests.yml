@@ -4,9 +4,12 @@ name: Generate regression tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - "java-component/src/main/**"
+      - "BP/**"
+      - "**/*.cs"
+      - "**/*.csproj"
   workflow_dispatch:
     inputs:
       base:

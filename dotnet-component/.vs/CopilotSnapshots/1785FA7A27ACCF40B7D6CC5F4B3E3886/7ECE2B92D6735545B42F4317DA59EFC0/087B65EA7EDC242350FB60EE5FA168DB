@@ -1,0 +1,74 @@
+﻿using BP.Models;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace BP.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class UserController : ControllerBase
+    {
+        // Static dummy data
+        private static readonly List<User> _users = new()
+        {
+            new User
+            {
+                UserId      = 1,
+                Name   = "Alice Johnson",
+                EmailId     = "alice.johnson@example.com",
+                ContactNo   = "555-101-2020",
+                PrimaryBizNo = "BIZ-001",
+                Address     = "12 Oak Street, Springfield, IL 62701",
+                Password    = "ef92b778bafe771207823db89f15caeb", // hashed
+                CreatedAt = new DateTime(2023, 1, 15, 9, 0, 0, DateTimeKind.Utc),
+                UpdatedAt   = new DateTime(2024, 3, 10, 11, 30, 0, DateTimeKind.Utc)
+            },
+            new User
+            {
+                UserId  = 2,
+                Name        = "Bob Martinez",
+                EmailId     = "bob.martinez@example.com",
+                ContactNo   = "555-202-3030",
+                PrimaryBizNo = "BIZ-002",
+                Address     = "45 Maple Avenue, Chicago, IL 60601",
+                Password    = "5f4dcc3b5aa765d61d8327deb882cf99", // hashed
+                CreatedAt   = new DateTime(2023, 4, 20, 8, 0, 0, DateTimeKind.Utc),
+                UpdatedAt   = new DateTime(2024, 5, 18, 14, 0, 0, DateTimeKind.Utc)
+            },
+            new User
+            {
+                UserId      = 3,
+                Name        = "Carol White",
+                EmailId     = "carol.white@example.com",
+                ContactNo   = "555-303-4040",
+                PrimaryBizNo = "BIZ-003",
+                Address     = "78 Pine Road, Naperville, IL 60540",
+                Password    = "d8578edf8458ce06fbc5bb76a58c5ca4", // hashed
+                CreatedAt   = new DateTime(2023, 7, 5, 10, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2024, 6, 1, 9, 45, 0, DateTimeKind.Utc)
+            }
+        };
+
+        public UserController() { }
+
+        /// <summary>
+        /// Gets user details by user ID.
+        /// </summary>
+        /// <param name="userId">The unique identifier of the user.</param>
+        /// <returns>User details if found; otherwise 404.</returns>
+        [HttpGet("{userId:int}", Name = "GetUserById")]
+        [ProducesResponseType(typeof(User), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public ActionResult<User> GetUserById(int userId)
+        {
+            var user = _users.FirstOrDefault(u => u.UserId == userId);
+
+            if (user is null)
+                return NotFound(new { message = $"User with ID {userId} was not found." });
+
+            return Ok(user);
+        }
+    }
+}

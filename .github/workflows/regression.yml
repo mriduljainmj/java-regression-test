@@ -4,10 +4,11 @@ name: Cucumber regression
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - "java-component/**"
   pull_request:
+    branches: [main, develop]
     paths:
       - "java-component/**"
 
@@ -23,8 +24,23 @@ jobs:
           java-version: "17"
           cache: maven
 
-      - name: Run Cucumber regression suite
-        run: mvn -f java-component/pom.xml --batch-mode verify
+      - uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Run regression suite (Java or .NET)
+        run: |
+          if [ -f java-component/pom.xml ]; then
+            mvn -f java-component/pom.xml --batch-mode verify
+          elif ls BP/*.csproj >/dev/null 2>&1; then
+            # Run .NET tests (run all test projects under BP/)
+            for proj in BP/*.csproj; do
+              echo "Running dotnet test $proj"
+              dotnet test "$proj" --nologo --verbosity minimal || exit 1
+            done
+          else
+            echo "No known test project found (java-component/pom.xml or BP/*.csproj)" && exit 1
+          fi
 
       - name: Upload Cucumber report
         if: always()
