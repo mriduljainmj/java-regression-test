@@ -17,7 +17,7 @@ class FeatureFile(BaseModel):
 
 
 class StepDefinitionFile(BaseModel):
-    """One Java step-definition (glue) file to create or update.
+    """One Java or C# step-definition (glue) file to create or update.
 
     Only needed when the required behavior cannot be expressed with existing
     step patterns. UPDATE content must be the FULL file and must preserve every
@@ -28,11 +28,22 @@ class StepDefinitionFile(BaseModel):
         description="Path relative to the repository root, e.g. Tests/StepDefinitions/OrderStepDefinitions.cs or src/test/java/…/OrderStepDefinitions.java"
     )
     action: Literal["CREATE", "UPDATE"]
-    content: str = Field(description="Full source of the step-definition file (C# or Java)")
-    language: Optional[Literal["java", "csharp"]] = Field(
+    content: str = Field(
+        description="Full source of the step-definition file (C# or Java)",
+        alias="java_content",
+    )
+    language: Optional[Literal["java", "csharp"] ] = Field(
         default=None,
         description="Optional language hint: 'java' or 'csharp'. If omitted, inferred from file extension."
     )
+
+    model_config = {
+        "populate_by_name": True,
+    }
+
+    @property
+    def java_content(self) -> str:
+        return self.content
 
 
 class GenerationResult(BaseModel):

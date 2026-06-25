@@ -21,6 +21,7 @@ from .prompts import (
     TEST_FAILURE_TEMPLATE,
     USER_PROMPT_TEMPLATE,
 )
+from . import dotnet_prompt
 from .state import FeatureFile, GenerationResult, StepDefinitionFile, TestGenState
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,10 @@ else:
 JAVA_SOURCE_MARKER = "src/main/java"
 JAVA_TEST_MARKER = "src/test/java"
 FEATURES_DIR_MARKER = "src/test/resources/features"
+
+# .NET support
+CS_SOURCE_EXT = ".cs"
+FEATURES_DIR_MARKER_DOTNET = "Tests/Features"
 
 # GitHub sends this as `before` on the first push to a branch.
 _ZERO_SHA = re.compile(r"^0{7,40}$")
@@ -133,12 +138,22 @@ def collect_diff(state: TestGenState) -> TestGenState:
     changed_files = [line.strip() for line in changed.splitlines() if line.strip()]
 
     java_changes = [f for f in changed_files if JAVA_SOURCE_MARKER in f and f.endswith(".java")]
+    cs_changes = [f for f in changed_files if f.endswith(CS_SOURCE_EXT) or f.endswith(".csproj")]
+
+    project_type = None
+    if cs_changes:
+        project_type = "dotnet"
+    elif java_changes:
+        project_type = "java"
+
     update: TestGenState = {"git_diff": diff, "changed_files": changed_files}
-    if not java_changes:
+    if project_type is None:
         update["skipped_reason"] = (
-            "No Java main-source changes between "
+            "No Java or C# source changes between "
             f"{base} and {head}; nothing to generate tests for."
         )
+    else:
+        update["project_type"] = project_type
     return update
 
 
@@ -146,40 +161,60 @@ def gather_context(state: TestGenState) -> TestGenState:
     """Read source files, glue code, existing features, and any API spec."""
     repo = Path(state["repo_path"])
     changed_files = state["changed_files"]
+    project_type = state.get("project_type", "java")
 
-    # All main-source Java files, with the changed ones FIRST so truncation by
-    # MAX_CONTEXT_CHARS sacrifices the least relevant context. The model needs
-    # the unchanged files too: stale-assertion detection means executing the
-    # existing scenarios against the post-change code, and the behavior an
-    # assertion depends on often lives outside the diffed files.
-    changed_java = [
-        rel for rel in changed_files
-        if JAVA_SOURCE_MARKER in rel and rel.endswith(".java")
-    ]
-    other_java = [
-        str(p.relative_to(repo))
-        for p in _iter_repo_files(repo, "*.java")
-        if JAVA_SOURCE_MARKER in str(p) and str(p.relative_to(repo)) not in changed_java
-    ]
     sources: list = []
-    for rel in changed_java + other_java:
-        path = repo / rel
-        if path.is_file():
-            marker = "CHANGED IN THIS DIFF" if rel in changed_java else "unchanged"
-            sources.append(f"// FILE ({marker}): {rel}\n{_read(path)}")
-
-    # Glue code is the reuse contract. Find it by content (any test-source file
-    # with @Given/@When/@Then annotations), not by file-naming convention, and
-    # keep the parsed cucumber expressions for the post-generation validator.
     step_patterns: list = []
-    for java in _iter_repo_files(repo, "*.java"):
-        rel = str(java.relative_to(repo))
-        if JAVA_TEST_MARKER not in rel:
-            continue
-        text = _read(java)
-        patterns = extract_step_patterns(text)
-        if patterns:
-            step_patterns.extend(patterns)
+
+    if project_type == "java":
+        # All main-source Java files, with changed ones first.
+        changed_java = [
+            rel for rel in changed_files
+            if JAVA_SOURCE_MARKER in rel and rel.endswith(".java")
+        ]
+        other_java = [
+            str(p.relative_to(repo))
+            for p in _iter_repo_files(repo, "*.java")
+            if JAVA_SOURCE_MARKER in str(p) and str(p.relative_to(repo)) not in changed_java
+        ]
+        for rel in changed_java + other_java:
+            path = repo / rel
+            if path.is_file():
+                marker = "CHANGED IN THIS DIFF" if rel in changed_java else "unchanged"
+                sources.append(f"// FILE ({marker}): {rel}\n{_read(path)}")
+
+        for java in _iter_repo_files(repo, "*.java"):
+            rel = str(java.relative_to(repo))
+            if JAVA_TEST_MARKER not in rel:
+                continue
+            text = _read(java)
+            patterns = extract_step_patterns(text)
+            if patterns:
+                step_patterns.extend(patterns)
+                sources.append(f"// FILE (step definitions): {rel}\n{text}")
+    else:
+        # All .NET source files in the component, with changed ones first.
+        changed_cs = [
+            rel for rel in changed_files
+            if rel.endswith(CS_SOURCE_EXT)
+        ]
+        other_cs = [
+            str(p.relative_to(repo))
+            for p in _iter_repo_files(repo, "*.cs")
+            if "dotnet-component" in str(p.relative_to(repo)) and str(p.relative_to(repo)) not in changed_cs
+        ]
+        for rel in changed_cs + other_cs:
+            path = repo / rel
+            if path.is_file():
+                marker = "CHANGED IN THIS DIFF" if rel in changed_cs else "unchanged"
+                sources.append(f"// FILE ({marker}): {rel}\n{_read(path)}")
+
+        for cs in _iter_repo_files(repo, "*StepDefinitions.cs"):
+            rel = str(cs.relative_to(repo))
+            text = _read(cs)
+            patterns = extract_step_patterns(text)
+            if patterns:
+                step_patterns.extend(patterns)
             sources.append(f"// FILE (step definitions): {rel}\n{text}")
     if not step_patterns:
         logger.warning("no step definitions found — undefined-step validation disabled")
@@ -246,7 +281,7 @@ def _parse_file_blocks(text: str) -> GenerationResult:
             ))
         else:
             stepdefs.append(StepDefinitionFile(
-                file_name=path, action=action.upper(), java_content=content,
+                file_name=path, action=action.upper(), content=content,
             ))
 
     return GenerationResult(
@@ -326,12 +361,31 @@ def generate_tests(state: TestGenState) -> TestGenState:
         },
     )
 
-    user_prompt = USER_PROMPT_TEMPLATE.format(
+    project_type = state.get("project_type", "java")
+    prompt_module = dotnet_prompt if project_type == "dotnet" else __import__("testgen.prompts", fromlist=["*"])
+
+    user_prompt = prompt_module.USER_PROMPT_TEMPLATE.format(
         target_component_context=state["target_component_context"],
         git_diff=state["git_diff"][:MAX_CONTEXT_CHARS],
         existing_feature_examples=state["existing_feature_examples"],
         api_spec=state["api_spec"],
     )
+
+    if state.get("validation_errors"):
+        errors = "\n".join(f"- {e}" for e in state["validation_errors"])
+        user_prompt += prompt_module.RETRY_SUFFIX_TEMPLATE.format(errors=errors)
+
+    if state.get("test_failures"):
+        failures = "\n".join(state["test_failures"])
+        user_prompt += prompt_module.TEST_FAILURE_TEMPLATE.format(failures=failures)
+
+    full_prompt = f"""
+    {prompt_module.SYSTEM_PROMPT}
+
+    {user_prompt}
+
+    {prompt_module.OUTPUT_FORMAT_INSTRUCTIONS}
+    """
 
     if state.get("validation_errors"):
         errors = "\n".join(f"- {e}" for e in state["validation_errors"])
@@ -435,32 +489,31 @@ def validate_output(state: TestGenState) -> TestGenState:
     for glue in generation.new_or_modified_step_definitions:
         name = glue.file_name.lstrip("./")
         target = (repo / name).resolve()
+            language = glue.language or ("java" if name.endswith(".java") else "csharp")
 
-        if name in seen_names:
-            errors.append(f"{name}: appears more than once in the output")
-        seen_names.add(name)
+            if name in seen_names:
+                errors.append(f"{name}: appears more than once in the output")
+            seen_names.add(name)
 
-        if not name.endswith(".java"):
-            errors.append(f"{name}: step-definition file name must end with .java")
-        if JAVA_TEST_MARKER not in name:
-            errors.append(f"{name}: step definitions must live under {JAVA_TEST_MARKER}/")
-        if not target.is_relative_to(repo):
-            errors.append(f"{name}: path escapes the repository root")
+            if language == "java":
+                if not name.endswith(".java"):
+                    errors.append(f"{name}: Java step-definition file name must end with .java")
+                if JAVA_TEST_MARKER not in name:
+                    errors.append(f"{name}: step definitions must live under {JAVA_TEST_MARKER}/")
+            else:
+                if not name.endswith(".cs"):
+                    errors.append(f"{name}: C# step-definition file name must end with .cs")
+                if "Tests" not in name:
+                    errors.append(f"{name}: C# step definitions must live under Tests/")
+            if not target.is_relative_to(repo):
+                errors.append(f"{name}: path escapes the repository root")
 
-        patterns_in_file = extract_step_patterns(glue.java_content)
-        if not patterns_in_file:
-            errors.append(
-                f"{name}: contains no @Given/@When/@Then step definitions — "
-                "if no new glue is needed, return an empty new_or_modified_step_definitions list"
-            )
-        # The real invariant (independent of the CREATE/UPDATE label): if the file
-        # already exists, the new content must keep every step it currently has —
-        # otherwise existing scenarios break. We DON'T reject on a CREATE/UPDATE
-        # label mismatch: the model returns full content either way, and rejecting
-        # it makes the retry loop thrash once a prior attempt has written the file.
-        if target.is_file():
-            removed = [
-                p for p in extract_step_patterns(_read(target))
+            patterns_in_file = extract_step_patterns(glue.content)
+            if not patterns_in_file:
+                errors.append(
+                    f"{name}: contains no @Given/@When/@Then step definitions — "
+                    "if no new glue is needed, return an empty new_or_modified_step_definitions list"
+                )
                 if p not in patterns_in_file
             ]
             if removed:
@@ -477,6 +530,12 @@ def validate_output(state: TestGenState) -> TestGenState:
     for feature in generation.new_or_modified_features:
         name = feature.file_name.lstrip("./")
         target = (repo / name).resolve()
+        if project_type == "dotnet":
+            if FEATURES_DIR_MARKER_DOTNET not in name:
+                errors.append(f"{name}: must live under {FEATURES_DIR_MARKER_DOTNET}/")
+        else:
+            if FEATURES_DIR_MARKER not in name:
+                errors.append(f"{name}: must live under {FEATURES_DIR_MARKER}/")
 
         if name in seen_names:
             errors.append(f"{name}: appears more than once in new_or_modified_features")
@@ -536,7 +595,7 @@ def write_features(state: TestGenState) -> TestGenState:
 
     outputs = [(f.file_name, f.action, f.gherkin_content)
                for f in generation.new_or_modified_features]
-    outputs += [(g.file_name, g.action, g.java_content)
+    outputs += [(g.file_name, g.action, g.content)
                 for g in generation.new_or_modified_step_definitions]
 
     for file_name, _action, raw_content in outputs:

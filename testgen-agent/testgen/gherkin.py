@@ -17,10 +17,7 @@ _STEP_ANNOTATION_RE = re.compile(
     # Match Java-style @Given("...") or C#-style [Given("...")]
     r'(?:@|\[)(?:Given|When|Then|And|But)\s*\(\s*"((?:[^"\\]|\\.)*)"\s*\)\]?'
 )
-# quotes inside the annotation string.
-_STEP_ANNOTATION_RE = re.compile(
-    r'@(?:Given|When|Then|And|But)\s*\(\s*"((?:[^"\\]|\\.)*)"'
-)
+
 
 _PARAM_REGEX = {
     "int": r"-?\d+",
