@@ -16,6 +16,8 @@ namespace BP.Services
 
         public IEnumerable<Product> GetAll() => _products;
 
+        public IEnumerable<Product> GetInStockProducts() => _products.Where(p => p.InStock);
+
         public Product GetById(int id) => _products.FirstOrDefault(p => p.ProductId == id);
 
         public Product Create(Product product)

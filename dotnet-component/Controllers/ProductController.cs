@@ -24,6 +24,12 @@ namespace BP.Controllers
             return Ok(_service.GetAll());
         }
 
+        [HttpGet("in-stock")]
+        public ActionResult<IEnumerable<Product>> GetInStockProducts()
+        {
+            return Ok(_service.GetInStockProducts());
+        }
+
         [HttpGet("{id}")]
         public ActionResult<Product> GetById(int id)
         {

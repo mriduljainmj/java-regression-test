@@ -42,3 +42,29 @@ Feature: Product management
     Given a product exists with id 2
     When a client DELETEs /api/products/2
     Then the response status should be 204
+
+  Scenario: Update product stock status to out of stock
+    Given a product exists with id 1
+    When a client PATCHes /api/products/1/stock with body
+      """
+      false
+      """
+    Then the response status should be 200
+    And the response JSON should contain "InStock": false
+
+  Scenario: Update product stock status to in stock
+    Given a product exists with id 1
+    When a client PATCHes /api/products/1/stock with body
+      """
+      true
+      """
+    Then the response status should be 200
+    And the response JSON should contain "InStock": true
+
+  Scenario: Update stock for non-existent product returns 404
+    When a client PATCHes /api/products/9999/stock with body
+      """
+      false
+      """
+    Then the response status should be 404
+    And the response JSON should contain message "Product with ID 9999 was not found."
