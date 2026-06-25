@@ -58,5 +58,19 @@ namespace BP.Controllers
             if (!ok) return NotFound(new { message = $"Product with ID {id} was not found." });
             return NoContent();
         }
+
+        [HttpPatch("{id}/stock")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public IActionResult UpdateStock(int id, [FromBody] bool inStock)
+        {
+            var product = _service.GetById(id);
+            if (product == null) 
+                return NotFound(new { message = $"Product with ID {id} was not found." });
+            
+            product.InStock = inStock;
+            _service.Update(id, product);
+            return Ok(new { message = "Stock status updated", ProductId = id, InStock = inStock });
+        }
     }
 }
