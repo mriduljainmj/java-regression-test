@@ -18,6 +18,8 @@ namespace BP.Services
 
         public IEnumerable<Product> GetInStockProducts() => _products.Where(p => p.InStock);
 
+        public IEnumerable<Product> SearchByName(string name) => _products.Where(p => p.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
+
         public Product GetById(int id) => _products.FirstOrDefault(p => p.ProductId == id);
 
         public Product Create(Product product)

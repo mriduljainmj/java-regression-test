@@ -30,6 +30,16 @@ namespace BP.Controllers
             return Ok(_service.GetInStockProducts());
         }
 
+        [HttpGet("search/{name}")]
+        public ActionResult<IEnumerable<Product>> SearchByName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return BadRequest(new { message = "Search term cannot be empty." });
+            
+            var results = _service.SearchByName(name);
+            return Ok(results);
+        }
+
         [HttpGet("{id}")]
         public ActionResult<Product> GetById(int id)
         {
