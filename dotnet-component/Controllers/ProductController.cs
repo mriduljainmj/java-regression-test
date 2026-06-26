@@ -94,6 +94,42 @@ namespace BP.Controllers
             return NoContent();
         }
 
+        [HttpPost("{id}/calculate-discount")]
+        public ActionResult CalculateDiscount(int id, [FromBody] int quantity)
+        {
+            if (quantity <= 0)
+                return BadRequest(new { message = "Quantity must be greater than 0." });
+            
+            var product = _service.GetById(id);
+            if (product == null)
+                return NotFound(new { message = $"Product with ID {id} was not found." });
+            
+            // Apply tiered discount: 5% for 10+, 10% for 25+, 15% for 50+
+            double discountPercent = 0;
+            if (quantity >= 50)
+                discountPercent = 15;
+            else if (quantity >= 25)
+                discountPercent = 10;
+            else if (quantity >= 10)
+                discountPercent = 5;
+            
+            double originalTotal = product.Price * quantity;
+            double discountAmount = originalTotal * (discountPercent / 100);
+            double finalTotal = originalTotal - discountAmount;
+            
+            return Ok(new 
+            { 
+                productId = id, 
+                productName = product.Name, 
+                quantity, 
+                unitPrice = product.Price, 
+                originalTotal, 
+                discountPercent, 
+                discountAmount, 
+                finalTotal 
+            });
+        }
+
         [HttpPatch("{id}/stock")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
