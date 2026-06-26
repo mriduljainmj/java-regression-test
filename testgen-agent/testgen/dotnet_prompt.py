@@ -135,9 +135,9 @@ Feature: Product stock updates
   Scenario: Update product stock status
     Given a product exists with id 1
     When a client PATCHes /api/products/1/stock with body
-      """
+      \"\"\"
       false
-      """
+      \"\"\"
     Then the response status should be 200
 === END ===
 using System.Net.Http;

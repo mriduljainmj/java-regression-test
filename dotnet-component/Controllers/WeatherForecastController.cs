@@ -29,5 +29,16 @@ namespace BP.Controllers
             })
             .ToArray();
         }
+
+        [HttpGet("today", Name = "GetTodayWeatherForecast")]
+        public WeatherForecast GetToday()
+        {
+            return new WeatherForecast
+            {
+                Date = DateOnly.FromDateTime(DateTime.Now),
+                TemperatureC = Random.Shared.Next(-20, 55),
+                Summary = Summaries[Random.Shared.Next(Summaries.Length)]
+            };
+        }
     }
 }
