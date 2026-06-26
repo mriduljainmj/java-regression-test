@@ -465,8 +465,13 @@ def _infer_project_type_from_generation(generation: GenerationResult) -> str | N
         if glue.file_name.endswith(".java") or FEATURES_DIR_MARKER in glue.file_name:
             return "java"
     for feature in generation.new_or_modified_features:
+        # Check for correct dotnet path first
         if FEATURES_DIR_MARKER_DOTNET in feature.file_name:
             return "dotnet"
+        # If feature is under dotnet-component/ but with wrong path, still dotnet
+        if feature.file_name.startswith("dotnet-component/") and feature.file_name.endswith(".feature"):
+            return "dotnet"
+        # Check for java path
         if FEATURES_DIR_MARKER in feature.file_name:
             return "java"
     return None
@@ -558,12 +563,18 @@ def validate_output(state: TestGenState) -> TestGenState:
 
         if not name.endswith(".feature"):
             errors.append(f"{name}: file name must end with .feature")
+        
+        # Feature path validation: strict check for correct directory
         if project_type == "dotnet":
-            if FEATURES_DIR_MARKER_DOTNET not in name:
-                errors.append(f"{name}: must live under {FEATURES_DIR_MARKER_DOTNET}/")
+            if "dotnet-component/Tests/Features" not in name:
+                errors.append(
+                    f"{name}: .NET feature files MUST be under dotnet-component/Tests/Features/ "
+                    f"not under {name.split('/')[0]}/. Use path: dotnet-component/Tests/Features/{name.split('/')[-1]}"
+                )
         else:
-            if FEATURES_DIR_MARKER not in name:
-                errors.append(f"{name}: must live under {FEATURES_DIR_MARKER}/")
+            if "src/test/resources/features" not in name:
+                errors.append(f"{name}: Java features must live under src/test/resources/features/")
+        
         if not target.is_relative_to(repo):
             errors.append(f"{name}: path escapes the repository root")
         # No CREATE/UPDATE-vs-existence check: the model returns full feature

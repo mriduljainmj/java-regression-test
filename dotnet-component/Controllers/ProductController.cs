@@ -182,5 +182,39 @@ namespace BP.Controllers
             _service.Update(id, product);
             return Ok(new { message = "Stock status updated", ProductId = id, InStock = inStock });
         }
+
+        [HttpPost("{id}/rate")]
+        public ActionResult RateProduct(int id, [FromBody] int rating)
+        {
+            if (rating < 1 || rating > 5)
+                return BadRequest(new { message = "Rating must be between 1 and 5." });
+            
+            var product = _service.GetById(id);
+            if (product == null)
+                return NotFound(new { message = $"Product with ID {id} was not found." });
+            
+            return Ok(new 
+            { 
+                productId = id, 
+                productName = product.Name, 
+                rating, 
+                message = $"Product rated {rating} stars" 
+            });
+        }
+
+        [HttpGet("top-rated")]
+        public ActionResult GetTopRated([FromQuery] int count = 5)
+        {
+            if (count <= 0 || count > 100)
+                return BadRequest(new { message = "Count must be between 1 and 100." });
+            
+            var allProducts = _service.GetAll().Take(count);
+            return Ok(new 
+            { 
+                count = allProducts.Count(), 
+                products = allProducts,
+                message = $"Retrieved top {count} products" 
+            });
+        }
     }
 }
