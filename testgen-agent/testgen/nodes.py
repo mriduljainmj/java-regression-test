@@ -238,6 +238,7 @@ def gather_context(state: TestGenState) -> TestGenState:
         "step_patterns": step_patterns,
         "attempts": 0,
         "validation_errors": [],
+        "project_type": project_type,
     }
 
 
@@ -452,6 +453,20 @@ def generate_tests(state: TestGenState) -> TestGenState:
     return {"generation": generation, "attempts": attempts, "validation_errors": []}
 
 
+def _infer_project_type_from_generation(generation: GenerationResult) -> str | None:
+    for glue in generation.new_or_modified_step_definitions:
+        if glue.file_name.endswith(".cs") or FEATURES_DIR_MARKER_DOTNET in glue.file_name:
+            return "dotnet"
+        if glue.file_name.endswith(".java") or FEATURES_DIR_MARKER in glue.file_name:
+            return "java"
+    for feature in generation.new_or_modified_features:
+        if FEATURES_DIR_MARKER_DOTNET in feature.file_name:
+            return "dotnet"
+        if FEATURES_DIR_MARKER in feature.file_name:
+            return "java"
+    return None
+
+
 def validate_output(state: TestGenState) -> TestGenState:
     """Validate generated Gherkin (structure, paths, CREATE/UPDATE consistency,
     and that every step matches an existing step definition)."""
@@ -461,7 +476,9 @@ def validate_output(state: TestGenState) -> TestGenState:
         return {}
 
     repo = Path(state["repo_path"]).resolve()
-    project_type = state.get("project_type", "java")
+    project_type = state.get("project_type")
+    if project_type is None:
+        project_type = _infer_project_type_from_generation(generation) or "java"
     step_patterns = state.get("step_patterns", [])
     errors: list = []
     seen_names = set()
@@ -529,8 +546,12 @@ def validate_output(state: TestGenState) -> TestGenState:
 
         if not name.endswith(".feature"):
             errors.append(f"{name}: file name must end with .feature")
-        if FEATURES_DIR_MARKER not in name:
-            errors.append(f"{name}: must live under {FEATURES_DIR_MARKER}/")
+        if project_type == "dotnet":
+            if FEATURES_DIR_MARKER_DOTNET not in name:
+                errors.append(f"{name}: must live under {FEATURES_DIR_MARKER_DOTNET}/")
+        else:
+            if FEATURES_DIR_MARKER not in name:
+                errors.append(f"{name}: must live under {FEATURES_DIR_MARKER}/")
         if not target.is_relative_to(repo):
             errors.append(f"{name}: path escapes the repository root")
         # No CREATE/UPDATE-vs-existence check: the model returns full feature
