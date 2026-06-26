@@ -40,7 +40,7 @@ namespace BP.Controllers
         }
 
         [HttpGet("search/{name}")]
-        public ActionResult SearchByName(string name, [FromQuery] decimal? minPrice = null, [FromQuery] decimal? maxPrice = null)
+        public ActionResult SearchByName(string name, [FromQuery] double? minPrice = null, [FromQuery] double? maxPrice = null)
         {
             if (string.IsNullOrWhiteSpace(name))
                 return BadRequest(new { message = "Search term cannot be empty." });
