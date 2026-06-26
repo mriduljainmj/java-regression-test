@@ -387,24 +387,6 @@ def generate_tests(state: TestGenState) -> TestGenState:
     {prompt_module.OUTPUT_FORMAT_INSTRUCTIONS}
     """
 
-    if state.get("validation_errors"):
-        errors = "\n".join(f"- {e}" for e in state["validation_errors"])
-        user_prompt += RETRY_SUFFIX_TEMPLATE.format(errors=errors)
-
-    # Runtime failures from a prior `mvn test` — the strongest signal we have,
-    # because it reflects how the tests actually behave against the real code.
-    if state.get("test_failures"):
-        failures = "\n".join(state["test_failures"])
-        user_prompt += TEST_FAILURE_TEMPLATE.format(failures=failures)
-
-    full_prompt = f"""
-    {SYSTEM_PROMPT}
-
-    {user_prompt}
-
-    {OUTPUT_FORMAT_INSTRUCTIONS}
-    """
-
     response_text: Optional[str] = None
     last_error: Optional[Exception] = None
 
@@ -479,41 +461,45 @@ def validate_output(state: TestGenState) -> TestGenState:
         return {}
 
     repo = Path(state["repo_path"]).resolve()
+    project_type = state.get("project_type", "java")
     step_patterns = state.get("step_patterns", [])
     errors: list = []
     seen_names = set()
 
-    # Validate proposed Java glue first: its step patterns extend the set the
+    # Validate proposed glue first: its step patterns extend the set the
     # generated Gherkin is allowed to use.
     generated_patterns: list = []
     for glue in generation.new_or_modified_step_definitions:
         name = glue.file_name.lstrip("./")
         target = (repo / name).resolve()
-            language = glue.language or ("java" if name.endswith(".java") else "csharp")
+        language = glue.language or ("java" if name.endswith(".java") else "csharp")
 
-            if name in seen_names:
-                errors.append(f"{name}: appears more than once in the output")
-            seen_names.add(name)
+        if name in seen_names:
+            errors.append(f"{name}: appears more than once in the output")
+        seen_names.add(name)
 
-            if language == "java":
-                if not name.endswith(".java"):
-                    errors.append(f"{name}: Java step-definition file name must end with .java")
-                if JAVA_TEST_MARKER not in name:
-                    errors.append(f"{name}: step definitions must live under {JAVA_TEST_MARKER}/")
-            else:
-                if not name.endswith(".cs"):
-                    errors.append(f"{name}: C# step-definition file name must end with .cs")
-                if "Tests" not in name:
-                    errors.append(f"{name}: C# step definitions must live under Tests/")
-            if not target.is_relative_to(repo):
-                errors.append(f"{name}: path escapes the repository root")
+        if language == "java":
+            if not name.endswith(".java"):
+                errors.append(f"{name}: Java step-definition file name must end with .java")
+            if JAVA_TEST_MARKER not in name:
+                errors.append(f"{name}: step definitions must live under {JAVA_TEST_MARKER}/")
+        else:
+            if not name.endswith(".cs"):
+                errors.append(f"{name}: C# step-definition file name must end with .cs")
+            if "Tests" not in name:
+                errors.append(f"{name}: C# step definitions must live under Tests/")
+        if not target.is_relative_to(repo):
+            errors.append(f"{name}: path escapes the repository root")
 
-            patterns_in_file = extract_step_patterns(glue.content)
-            if not patterns_in_file:
-                errors.append(
-                    f"{name}: contains no @Given/@When/@Then step definitions — "
-                    "if no new glue is needed, return an empty new_or_modified_step_definitions list"
-                )
+        patterns_in_file = extract_step_patterns(glue.content)
+        if not patterns_in_file:
+            errors.append(
+                f"{name}: contains no @Given/@When/@Then step definitions — "
+                "if no new glue is needed, return an empty new_or_modified_step_definitions list"
+            )
+        if target.is_file():
+            removed = [
+                p for p in extract_step_patterns(_read(target))
                 if p not in patterns_in_file
             ]
             if removed:
