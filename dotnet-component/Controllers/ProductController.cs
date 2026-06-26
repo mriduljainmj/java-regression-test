@@ -37,6 +37,8 @@ namespace BP.Controllers
                 return BadRequest(new { message = "Search term cannot be empty." });
             
             var results = _service.SearchByName(name);
+            if (!results.Any())
+                return NotFound(new { message = $"No products were found matching '{name}'." });
             return Ok(results);
         }
 
