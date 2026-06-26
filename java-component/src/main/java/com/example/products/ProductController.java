@@ -28,10 +28,13 @@ public class ProductController {
     }
 
     @GetMapping
-    public List<Product> getAllProducts(
+    public ResponseEntity<?> getAllProducts(
             @RequestParam(required = false) Double minPrice,
             @RequestParam(required = false) Double maxPrice) {
-        return productService.findAll(minPrice, maxPrice);
+        List<Product> products = productService.findAll(minPrice, maxPrice);
+        return ResponseEntity.ok()
+                .header("X-Total-Count", String.valueOf(products.size()))
+                .body(products);
     }
 
     @GetMapping("/{id}")
