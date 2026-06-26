@@ -26,9 +26,10 @@ namespace BP.Controllers
         }
 
         [HttpGet("in-stock")]
-        public ActionResult<IEnumerable<Product>> GetInStockProducts()
+        public ActionResult GetInStockProducts()
         {
-            return Ok(_service.GetInStockProducts());
+            var products = _service.GetInStockProducts().ToList();
+            return Ok(new { total = products.Count, items = products });
         }
 
         [HttpGet("in-stock/count")]

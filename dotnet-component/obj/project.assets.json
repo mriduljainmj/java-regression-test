@@ -546,23 +546,23 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\RaveenaRana\\.nuget\\packages\\": {},
+    "C:\\Users\\ManshuBatra\\.nuget\\packages\\": {},
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\RaveenaRana\\source\\repos\\BP\\BP.csproj",
+      "projectUniqueName": "C:\\Users\\ManshuBatra\\Desktop\\java-regression-test\\dotnet-component\\BP.csproj",
       "projectName": "BP",
-      "projectPath": "C:\\Users\\RaveenaRana\\source\\repos\\BP\\BP.csproj",
-      "packagesPath": "C:\\Users\\RaveenaRana\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\RaveenaRana\\source\\repos\\BP\\obj\\",
+      "projectPath": "C:\\Users\\ManshuBatra\\Desktop\\java-regression-test\\dotnet-component\\BP.csproj",
+      "packagesPath": "C:\\Users\\ManshuBatra\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\ManshuBatra\\Desktop\\java-regression-test\\dotnet-component\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
       ],
       "configFilePaths": [
-        "C:\\Users\\RaveenaRana\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Users\\ManshuBatra\\AppData\\Roaming\\NuGet\\NuGet.Config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
@@ -571,7 +571,6 @@
       ],
       "sources": {
         "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
-        "C:\\Program Files\\dotnet\\library-packs": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
@@ -620,7 +619,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.306/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.311/PortableRuntimeIdentifierGraph.json"
       }
     }
   }
