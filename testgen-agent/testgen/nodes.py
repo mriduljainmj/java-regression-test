@@ -580,7 +580,8 @@ def validate_output(state: TestGenState) -> TestGenState:
                 message = (
                     f'{name}: step "{step}" matches no existing step definition. '
                     "Rephrase it using one of the step patterns from the provided "
-                    "step definitions, or add the missing glue in a STEPDEF block."
+                    "step definitions, or add the missing glue in a STEPDEF block under "
+                    "dotnet-component/Tests/ if this is a dotnet project."
                 )
                 if "<" in step:
                     message += (

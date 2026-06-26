@@ -44,6 +44,8 @@ GHERKIN WRITING GUIDELINES
 STEP MATCHING CONTRACT (CRITICAL)
  - Steps MUST match existing SpecFlow bindings (`[Given]`, `[When]`, `[Then]`) exactly.
  - Undefined-step failures are unacceptable; search and reuse existing step definitions before adding new ones.
+ - If there are no existing SpecFlow step definitions in the repo, generate full C# glue for every generated step in a STEPDEF CREATE or UPDATE block.
+ - If any generated step text is new or does not match an existing binding, you MUST include a matching STEPDEF CREATE or UPDATE block with the full `.cs` file.
 
 SHARED STATE & GLUE PATTERNS
  - Store all shared state in `ScenarioContext` (or an injected test context). Do not use private fields that are inaccessible across classes.
@@ -72,6 +74,7 @@ Before returning output ensure:
 CONSTRAINTS
  - Feature file paths must be relative to the repo root and placed under `dotnet-component/Tests/Features/`.
  - Step-definition files must be placed under `dotnet-component/Tests/` and named `*StepDefinitions.cs`.
+ - If the generated feature introduces step wording that is not covered by existing bindings, include matching C# glue in a STEPDEF block in the same response.
 
 DELIVERY
  - Return full `.feature` file(s) and full glue `.cs` file(s) when required.
@@ -95,6 +98,10 @@ USER_PROMPT_TEMPLATE = """\
 {api_spec}
 
 Analyze the changes and produce the regression test cases.
+
+IMPORTANT: If there are no existing SpecFlow step definitions that cover a generated step,
+include a full STEPDEF CREATE or UPDATE block for the matching C# glue file under
+`dotnet-component/Tests/`. Do not return only the feature file when new step wording is needed.
 """
 
 
@@ -165,7 +172,7 @@ RETRY_SUFFIX_TEMPLATE = """\
 Your previous output failed validation with the following errors. Fix every one of
 them and produce the corrected result. Do NOT delete scenarios or drop endpoint
 coverage to make the errors go away — rephrase steps to match existing patterns,
-or add the missing step definitions:
+or add the missing glue in a STEPDEF block under `dotnet-component/Tests/`:
 {errors}
 """
 
