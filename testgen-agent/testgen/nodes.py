@@ -785,7 +785,7 @@ def create_pull_request(state: TestGenState) -> TestGenState:
             "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
         )
         pr_url = _run(
-            ["gh", "pr", "create", "--title", title, "--body", body, "--head", branch],
+            ["gh", "pr", "create", "--title", title, "--body", body, "--head", branch, "--base", original_ref],
             cwd=repo,
         ).strip()
         logger.info("Opened PR: %s", pr_url)
