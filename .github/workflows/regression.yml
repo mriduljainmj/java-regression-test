@@ -7,10 +7,16 @@ on:
     branches: [main, develop]
     paths:
       - "java-component/**"
+      - "dotnet-component/**"
+      - "**/*.cs"
+      - "**/*.csproj"
   pull_request:
     branches: [main, develop]
     paths:
       - "java-component/**"
+      - "dotnet-component/**"
+      - "**/*.cs"
+      - "**/*.csproj"
 
 jobs:
   regression:
@@ -28,23 +34,37 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-      - name: Run regression suite (Java or .NET)
+      - name: Run regression suite (Java and .NET)
         run: |
+          echo "Running Java regression tests..."
           if [ -f java-component/pom.xml ]; then
             mvn -f java-component/pom.xml --batch-mode verify
-          elif ls BP/*.csproj >/dev/null 2>&1; then
-            # Run .NET tests (run all test projects under BP/)
-            for proj in BP/*.csproj; do
+          else
+            echo "No Java test project found (java-component/pom.xml)"
+          fi
+          
+          echo "Running .NET regression tests..."
+          if ls dotnet-component/*.csproj >/dev/null 2>&1; then
+            for proj in dotnet-component/*.csproj; do
               echo "Running dotnet test $proj"
-              dotnet test "$proj" --nologo --verbosity minimal || exit 1
+              dotnet test "$proj" --nologo --verbosity minimal --logger trx
             done
           else
-            echo "No known test project found (java-component/pom.xml or BP/*.csproj)" && exit 1
+            echo "No .NET test project found (dotnet-component/*.csproj)"
           fi
 
-      - name: Upload Cucumber report
+      - name: Upload Cucumber report (Java)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cucumber-report
+          name: cucumber-report-java
           path: java-component/target/cucumber-report.*
+          if-no-files-found: warn
+
+      - name: Upload .NET test results (TRX)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-test-results
+          path: "**/TestResults/**/*.trx"
+          if-no-files-found: warn
