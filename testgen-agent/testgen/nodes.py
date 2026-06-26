@@ -524,6 +524,14 @@ def validate_output(state: TestGenState) -> TestGenState:
                 f"{name}: contains no @Given/@When/@Then step definitions — "
                 "if no new glue is needed, return an empty new_or_modified_step_definitions list"
             )
+        
+        # For C# files, check for Java-style annotations (@Given, @When, @Then)
+        if name.endswith(".cs"):
+            if re.search(r'@(Given|When|Then|Before|After)\s*\(', glue.content):
+                errors.append(
+                    f"{name}: contains Java-style annotations (@Given, @When, @Then). "
+                    "Use C# SpecFlow syntax instead: [Given], [When], [Then], e.g., [Given(\"I have a product\")]"
+                )
         if target.is_file():
             removed = [
                 p for p in extract_step_patterns(_read(target))

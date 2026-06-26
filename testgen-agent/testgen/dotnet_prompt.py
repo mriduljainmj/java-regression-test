@@ -47,6 +47,22 @@ STEP MATCHING CONTRACT (CRITICAL)
  - If there are no existing SpecFlow step definitions in the repo, generate full C# glue for every generated step in a STEPDEF CREATE or UPDATE block.
  - If any generated step text is new or does not match an existing binding, you MUST include a matching STEPDEF CREATE or UPDATE block with the full `.cs` file.
 
+C# SPECFLOW SYNTAX (NOT JAVA)
+ - **CRITICAL**: Use C# SpecFlow attributes in square brackets: `[Given]`, `[When]`, `[Then]`, `[Before]`, `[After]`
+ - **DO NOT** use Java annotations with @ symbols: `@Given`, `@When`, `@Then`
+ - Example CORRECT C# syntax:
+   ```
+   [Given("a product exists")]
+   public void GivenProductExists() { ... }
+   ```
+ - Example INCORRECT Java syntax (DO NOT USE):
+   ```
+   @Given("a product exists")  // ❌ WRONG - This is Java, not C#
+   ```
+ - Every step definition method MUST have a `[Given]`, `[When]`, or `[Then]` attribute with the step pattern.
+ - Use `ScenarioContext` from TechTalk.SpecFlow for shared state between steps.
+ - Use proper C# syntax: namespaces, classes, methods, camelCase for variables.
+
 SHARED STATE & GLUE PATTERNS
  - Store all shared state in `ScenarioContext` (or an injected test context). Do not use private fields that are inaccessible across classes.
  - Preferred test patterns: `HttpClient` from `WebApplicationFactory<TEntryPoint>` / TestServer, `ScenarioContext`, and helper methods already present in the project.
@@ -102,6 +118,12 @@ Analyze the changes and produce the regression test cases.
 IMPORTANT: If there are no existing SpecFlow step definitions that cover a generated step,
 include a full STEPDEF CREATE or UPDATE block for the matching C# glue file under
 `dotnet-component/Tests/`. Do not return only the feature file when new step wording is needed.
+
+CRITICAL REMINDER: This is a C# / SpecFlow project, NOT Java. Always use C# syntax:
+ - Step definitions use [Given], [When], [Then] attributes (NOT @Given, @When, @Then)
+ - Example: [Given("a product exists")] public void GivenProductExists() { ... }
+ - If you see @Given, @When, @Then in existing code, that's an ERROR—report it as invalid
+ - Use proper C# syntax, namespaces, classes, and ScenarioContext
 """
 
 
@@ -184,8 +206,11 @@ Your generated tests were written to disk and run with `dotnet test`. They FAILE
 Below is exactly why. Return the corrected, COMPLETE set of files again.
 
 How to read this and fix it:
-- "COMPILATION ERROR" means your C# step-definition code does not compile —
-  fix the C# (imports, types, method signatures, use `ScenarioContext` or injected test context for shared state). Return the full corrected .cs file.
+- "COMPILATION ERROR" in C# code means your step-definition code does not compile.
+  COMMON MISTAKE: Using @Given, @When, @Then (Java syntax) instead of [Given], [When], [Then] (C# syntax).
+  Always use square brackets for C# SpecFlow attributes, NEVER @ symbols.
+  Also check: imports (using statements), types, method signatures, use `ScenarioContext` for shared state.
+  Return the full corrected .cs file with proper C# syntax.
 - A scenario failure like "Expected status code <201> but was <400>" means your
   EXPECTED value is wrong — read the component source again and correct the assertion (status code, error message, computed total, boundary side) to match what the code actually does. Do NOT change the component code; the code is the source of truth.
 - An "undefined step" means a step has no matching glue — add the step definition or rephrase to an existing one.
