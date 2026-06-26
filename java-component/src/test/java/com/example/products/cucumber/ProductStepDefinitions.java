@@ -264,4 +264,9 @@ public class ProductStepDefinitions {
         assertThat(context.getLastResponse().jsonPath().getString("error"),
                 containsString(fragment));
     }
+
+    @Then("the response header {string} should be {string}")
+    public void theResponseHeaderShouldBe(String headerName, String expectedValue) {
+        assertThat(context.getLastResponse().getHeader(headerName), equalTo(expectedValue));
+    }
 }
