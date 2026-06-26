@@ -4,6 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <IsTestProject>true</IsTestProject>
     <Nullable>enable</Nullable>
+    <RootNamespace>BP.Tests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,8 +19,10 @@
     <ProjectReference Include="BP.csproj" />
   </ItemGroup>
 
+  <!-- Include feature files and step definitions from Tests folder -->
   <ItemGroup>
-    <Compile Update="**\*.feature.cs" DependentUpon="%(Filename)" />
+    <Compile Include="../Tests/**/*.cs" />
+    <SpecFlowFeatureFiles Include="../Tests/Features/**/*.feature" />
   </ItemGroup>
 
 </Project>

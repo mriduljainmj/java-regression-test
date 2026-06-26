@@ -130,6 +130,45 @@ namespace BP.Controllers
             });
         }
 
+        [HttpPost("{id}/validate-bulk-order")]
+        public ActionResult ValidateBulkOrder(int id, [FromBody] int quantity)
+        {
+            var isValid = _service.ValidateBulkOrder(id, quantity);
+            if (!isValid)
+            {
+                return BadRequest(new 
+                { 
+                    message = "Invalid bulk order: product not found, out of stock, quantity invalid, or exceeds limit (1000).",
+                    productId = id,
+                    quantity
+                });
+            }
+            
+            var (totalPrice, discountPercent) = _service.CalculateBulkDiscount(id, quantity);
+            return Ok(new 
+            { 
+                isValid = true, 
+                productId = id, 
+                quantity, 
+                totalPrice, 
+                discountPercent 
+            });
+        }
+
+        [HttpGet("inventory-summary")]
+        public ActionResult GetInventorySummary()
+        {
+            var inStockCount = _service.GetProductInventoryCount();
+            var totalCount = _service.GetAll().Count();
+            return Ok(new 
+            { 
+                totalProducts = totalCount, 
+                inStockCount, 
+                outOfStockCount = totalCount - inStockCount,
+                inventoryPercentage = (double)inStockCount / totalCount * 100
+            });
+        }
+
         [HttpPatch("{id}/stock")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]

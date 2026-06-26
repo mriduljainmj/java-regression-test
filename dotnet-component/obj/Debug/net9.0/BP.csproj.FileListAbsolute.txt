@@ -68,3 +68,4 @@ C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net
 C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.pdb
 C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.genruntimeconfig.cache
 C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\ref\BP.dll
+C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin\Debug\net9.0\specflow.json

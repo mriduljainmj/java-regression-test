@@ -12,5 +12,8 @@ namespace BP.Services
         Product Create(Product product);
         bool Update(int id, Product product);
         bool Delete(int id);
+        bool ValidateBulkOrder(int productId, int quantity);
+        (double totalPrice, int discountPercent) CalculateBulkDiscount(int productId, int quantity);
+        int GetProductInventoryCount();
     }
 }
