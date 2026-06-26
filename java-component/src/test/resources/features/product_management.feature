@@ -11,6 +11,11 @@ Feature: Product management
     Then the response status should be 200
     And the response should contain 0 products
 
+  Scenario: Retrieve product catalog includes total count header
+    When a client requests all products
+    Then the response status should be 200
+    And the response header "X-Total-Count" should be "0"
+
   Scenario: Create a valid product
     When a client creates a product with name "Laptop" and price 999.99
     Then the response status should be 201
