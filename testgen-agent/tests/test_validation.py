@@ -67,6 +67,56 @@ class GlueValidationTest(unittest.TestCase):
         out = validate_output(make_state(self.repo, generation))
         self.assertEqual(out["validation_errors"], [])
 
+    def test_dotnet_glue_and_feature_paths_are_allowed(self):
+        generation = GenerationResult(
+            impacted_endpoints=["GET /weatherforecast/today"],
+            analysis_summary="x",
+            new_or_modified_features=[FeatureFile(
+                file_name="dotnet-component/Tests/Features/weatherforecast_today.feature",
+                action="CREATE",
+                gherkin_content=(
+                    "Feature: Today forecast\n  Scenario: Get today forecast\n"
+                    "    When a client requests the today's weather forecast\n"
+                    "    Then the response status should be 200\n"
+                ),
+            )],
+            new_or_modified_step_definitions=[StepDefinitionFile(
+                file_name="dotnet-component/Tests/WeatherForecastStepDefinitions.cs",
+                action="CREATE",
+                java_content='''using TechTalk.SpecFlow;\n\n[Binding]\npublic class WeatherForecastStepDefinitions {\n    [When("a client requests the today's weather forecast")]\n    public void WhenAClientRequestsTheTodaysWeatherForecast() {}\n    [Then("the response status should be {int}")]\n    public void ThenTheResponseStatusShouldBe(int status) {}\n}''',
+                language="csharp",
+            )],
+        )
+        state = make_state(self.repo, generation)
+        state["project_type"] = "dotnet"
+        out = validate_output(state)
+        self.assertEqual(out["validation_errors"], [])
+
+    def test_dotnet_java_stepdef_is_rejected(self):
+        generation = GenerationResult(
+            impacted_endpoints=[],
+            analysis_summary="x",
+            new_or_modified_features=[],
+            new_or_modified_step_definitions=[StepDefinitionFile(
+                file_name="dotnet-component/Tests/WeatherForecastStepDefinitions.java",
+                action="CREATE",
+                java_content=NEW_GLUE,
+                language="java",
+            )],
+        )
+        state = make_state(self.repo, generation)
+        state["project_type"] = "dotnet"
+        out = validate_output(state)
+        self.assertTrue(any(
+            ".java step-definition files are invalid for dotnet projects" in e
+            for e in out["validation_errors"]
+        ))
+
+    def test_dotnet_selects_dotnet_prompt_module(self):
+        from testgen.nodes import _get_prompt_module
+        self.assertIs(_get_prompt_module("dotnet"), __import__("testgen.dotnet_prompt", fromlist=["*"]))
+        self.assertIsNot(_get_prompt_module("java"), __import__("testgen.dotnet_prompt", fromlist=["*"]))
+
     def test_new_step_without_glue_is_flagged(self):
         generation = GenerationResult(
             impacted_endpoints=[],

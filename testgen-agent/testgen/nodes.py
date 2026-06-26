@@ -63,7 +63,8 @@ FEATURES_DIR_MARKER = "src/test/resources/features"
 
 # .NET support
 CS_SOURCE_EXT = ".cs"
-FEATURES_DIR_MARKER_DOTNET = "Tests/Features"
+FEATURES_DIR_MARKER_DOTNET = "dotnet-component/Tests/Features"
+DOTNET_TESTS_DIR_MARKER = "dotnet-component/Tests/"
 
 # GitHub sends this as `before` on the first push to a branch.
 _ZERO_SHA = re.compile(r"^0{7,40}$")
@@ -242,6 +243,10 @@ def gather_context(state: TestGenState) -> TestGenState:
     }
 
 
+def _get_prompt_module(project_type: str):
+    return dotnet_prompt if project_type == "dotnet" else __import__("testgen.prompts", fromlist=["*"])
+
+
 def _strip_markdown_fences(text: str) -> str:
     text = text.strip()
     if text.startswith("```"):
@@ -363,7 +368,7 @@ def generate_tests(state: TestGenState) -> TestGenState:
     )
 
     project_type = state.get("project_type", "java")
-    prompt_module = dotnet_prompt if project_type == "dotnet" else __import__("testgen.prompts", fromlist=["*"])
+    prompt_module = _get_prompt_module(project_type)
 
     user_prompt = prompt_module.USER_PROMPT_TEMPLATE.format(
         target_component_context=state["target_component_context"],
@@ -495,7 +500,12 @@ def validate_output(state: TestGenState) -> TestGenState:
             errors.append(f"{name}: appears more than once in the output")
         seen_names.add(name)
 
-        if language == "java":
+        if project_type == "dotnet" and language == "java":
+            errors.append(
+                f"{name}: .java step-definition files are invalid for dotnet projects. "
+                "Use a .cs file under dotnet-component/Tests/ instead."
+            )
+        elif language == "java":
             if not name.endswith(".java"):
                 errors.append(f"{name}: Java step-definition file name must end with .java")
             if JAVA_TEST_MARKER not in name:
@@ -503,8 +513,8 @@ def validate_output(state: TestGenState) -> TestGenState:
         else:
             if not name.endswith(".cs"):
                 errors.append(f"{name}: C# step-definition file name must end with .cs")
-            if "Tests" not in name:
-                errors.append(f"{name}: C# step definitions must live under Tests/")
+            if DOTNET_TESTS_DIR_MARKER not in name:
+                errors.append(f"{name}: C# step definitions must live under {DOTNET_TESTS_DIR_MARKER}")
         if not target.is_relative_to(repo):
             errors.append(f"{name}: path escapes the repository root")
 
@@ -533,12 +543,6 @@ def validate_output(state: TestGenState) -> TestGenState:
     for feature in generation.new_or_modified_features:
         name = feature.file_name.lstrip("./")
         target = (repo / name).resolve()
-        if project_type == "dotnet":
-            if FEATURES_DIR_MARKER_DOTNET not in name:
-                errors.append(f"{name}: must live under {FEATURES_DIR_MARKER_DOTNET}/")
-        else:
-            if FEATURES_DIR_MARKER not in name:
-                errors.append(f"{name}: must live under {FEATURES_DIR_MARKER}/")
 
         if name in seen_names:
             errors.append(f"{name}: appears more than once in new_or_modified_features")
