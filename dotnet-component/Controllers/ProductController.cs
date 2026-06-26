@@ -30,6 +30,13 @@ namespace BP.Controllers
             return Ok(_service.GetInStockProducts());
         }
 
+        [HttpGet("in-stock/count")]
+        public ActionResult GetInStockCount()
+        {
+            var count = _service.GetInStockProducts().Count();
+            return Ok(new { count });
+        }
+
         [HttpGet("search/{name}")]
         public ActionResult<IEnumerable<Product>> SearchByName(string name)
         {
