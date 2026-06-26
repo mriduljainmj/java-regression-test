@@ -40,15 +40,23 @@ namespace BP.Controllers
         }
 
         [HttpGet("search/{name}")]
-        public ActionResult<IEnumerable<Product>> SearchByName(string name)
+        public ActionResult SearchByName(string name, [FromQuery] decimal? minPrice = null, [FromQuery] decimal? maxPrice = null)
         {
             if (string.IsNullOrWhiteSpace(name))
                 return BadRequest(new { message = "Search term cannot be empty." });
             
-            var results = _service.SearchByName(name);
+            var results = _service.SearchByName(name).ToList();
+            
+            // Apply price filter if provided
+            if (minPrice.HasValue)
+                results = results.Where(p => p.Price >= minPrice.Value).ToList();
+            if (maxPrice.HasValue)
+                results = results.Where(p => p.Price <= maxPrice.Value).ToList();
+            
             if (!results.Any())
-                return NotFound(new { message = $"No products were found matching '{name}'." });
-            return Ok(results);
+                return NotFound(new { message = $"No products were found matching '{name}' with the specified price range." });
+            
+            return Ok(new { count = results.Count, searchTerm = name, minPrice, maxPrice, items = results });
         }
 
         [HttpGet("{id}")]
