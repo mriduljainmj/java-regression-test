@@ -23,24 +23,38 @@ build command, and failure format differ, all encapsulated in a `LanguageProfile
 ## Flow
 
 ```
-developer changes Java code
-        │  (push to main, paths: java-component/src/main/**)
+developer changes component code  (Java or .NET)
+        │  push to main → paths: java-component/src/main/** | dotnet-component/Api/**
         ▼
 [generate-tests.yml]  →  LangGraph agent:
-        │                  git diff → gather context (source, glue, features)
-        │                  → LLM generates Gherkin + Java glue (block format)
-        │                  → validate (step matching, every Examples row, paths)
-        │                  → retry with feedback, rotating models (up to 4×)
-        │                  → write files
+        │   collect_diff      detect language (java | dotnet) from changed files
+        │   gather_context    source + existing glue + features (+ API spec)
+        │   generate_tests    LLM writes Gherkin + glue, in the detected language
+        │        ▲            (delimited block format; model rotation on retries)
+        │        │
+        │   validate_output   step matching, every Examples row, paths, no dropped glue
+        │        │  (structural errors → back to generate, retry budget)
+        │        ▼
+        │   write_features    write the files to disk
+        │        │
+        │   run_generated_tests   run `mvn test` / `dotnet test`
+        │        │            FAIL → parse compile errors + scenario failures
+        │        └──────────  → feed back to generate_tests (up to 3 self-corrections)
+        │        ▼ pass (or out of retries)
+        │   create_pull_request
         ▼
 PR with new/updated tests  ──▶  regression check runs ON the PR
-        │                       (catches broken generated tests pre-merge)
+        │                       (defence in depth — catches anything the loop missed)
         ▼
 manual review  ──▶  merge
-        │
         ▼
-[regression.yml]  →  mvn verify on main  →  code and suite confirmed in sync
+[regression.yml]  →  mvn verify / dotnet test on main  →  code and suite in sync
 ```
+
+The agent doesn't just write tests — it **runs them and fixes itself**. Generated
+tests that don't compile or assert the wrong value are caught by `run_generated_tests`
+and corrected before the PR is opened (up to 3 rounds); only failures that survive
+all rounds reach the PR, flagged as failing.
 
 ## Repository layout
 
@@ -48,76 +62,87 @@ manual review  ──▶  merge
 |---|---|
 | `java-component/` | Java component under test: Spring Boot REST API with products (CRUD + price filtering + update/delete guards), orders (tiered bulk discounts, total cap), and reviews (rating bounds, average summary) — bean validation + `@RestControllerAdvice` |
 | `dotnet-component/` | .NET counterpart: ASP.NET Core products API + Reqnroll/xUnit suite. Exists so language detection has a `dotnet` target (see its README; needs `dotnet test` to verify) |
-| `java-component/src/test/resources/features/` | The Cucumber regression suite (what the agent maintains) |
-| `java-component/src/test/java/.../cucumber/` | Test harness: `TestContext` (shared scenario state), step-definition classes, Cucumber/Spring wiring |
+| `<component>/.../features/` | The Gherkin regression suite (what the agent maintains) |
+| `<component>/.../StepDefinitions` (Java `cucumber/`, C# `StepDefinitions/`) | Test harness: shared scenario state (`TestContext` bean / `TestState`), step-definition classes, framework wiring |
 | `testgen-agent/` | Python LangGraph agent that generates the tests |
-| `.github/workflows/generate-tests.yml` | Runs the agent when `src/main` code changes (or manually); opens the test PR |
-| `.github/workflows/regression.yml` | Runs `mvn verify` on pushes to `main` and PRs touching `java-component/` |
+| `testgen-agent/testgen/languages.py` | `LanguageProfile`s + `detect_language` — the one place language-specific behavior lives |
+| `dashboard/` | Stdlib dashboard merging GitHub Actions steps + per-scenario results into one UI |
+| `demo/` | Staged one-command change scripts + runbook for live walkthroughs |
+| `.github/workflows/generate-tests.yml` | Runs the agent when a component's source changes (or manually); opens the test PR |
+| `.github/workflows/regression.yml` | Runs the right suite (`mvn verify` / `dotnet test`) per changed component, on pushes to `main` and PRs |
 
 ## When does each workflow run?
 
 | Event | generate-tests | regression |
 |---|---|---|
-| Push to `main` touching `java-component/src/main/**` | ✅ (skipped for `test:` commits) | ✅ |
-| Push to `main` touching only tests/features | ❌ | ✅ |
-| Any PR touching `java-component/` (incl. the agent's own PRs) | ❌ | ✅ — the pre-merge safety net |
-| Push touching only `testgen-agent/`, workflows, docs | ❌ | ❌ |
+| Push to `main` touching a component's **source** (`java-component/src/main/**` or `dotnet-component/Api/**`) | ✅ (skipped for `test:` commits) | ✅ |
+| Push to `main` touching only that component's tests/features | ❌ | ✅ |
+| Any PR touching a component (incl. the agent's own PRs) | ❌ | ✅ — the pre-merge safety net |
+| Push touching only `testgen-agent/`, `dashboard/`, `demo/`, workflows, docs | ❌ | ❌ |
 | Manual (Actions → Run workflow, optional `base` input) | ✅ | ❌ |
+
+`regression.yml` runs only the suite for the component that changed (a `dorny/paths-filter`
+gate), so a Java-only change doesn't spin up the .NET job and vice versa.
 
 ## The agent (testgen-agent/)
 
 LangGraph state machine:
 
-`collect_diff → gather_context → generate_tests → validate_output → write_features → create_pull_request`
+`collect_diff → gather_context → generate_tests → validate_output → write_features → run_generated_tests → create_pull_request`
 
-- **collect_diff** — `git diff base..head`; exits early if no Java main-source changes.
-  Handles CI edge cases: all-zero `before` SHA (first push), force-pushed/unreachable
-  base (falls back to `head~1`, then the empty tree for single-commit repos).
+- **collect_diff** — `git diff base..head`; **detects the language** (java | dotnet)
+  from the changed files and exits early if no main-source changed. Handles CI edge
+  cases: all-zero `before` SHA (first push), force-pushed/unreachable base (falls
+  back to `head~1`, then the empty tree for single-commit repos).
 - **gather_context** — reads the full component source (changed files first), the
-  Java glue code (found by `@Given/@When/@Then` content, not file naming), every
-  existing `.feature` file, and an OpenAPI spec if present. Skips `target/`, venvs, etc.
-- **generate_tests** — calls the model via OpenRouter with a fallback chain and
-  exponential backoff on 429s. Output is a **delimited block format** (raw file
-  contents between `=== FEATURE|STEPDEF CREATE|UPDATE <path> === … === END ===`
-  markers) — free models reliably fail to JSON-escape Java source, so JSON is only
-  a tolerated fallback (with lone-backslash repair). Unparseable output re-enters
-  the retry loop as feedback instead of crashing. Validation retries start from a
-  **different model** in the chain to break repeated misunderstandings.
+  glue code (found by step annotations/attributes, not file naming), every existing
+  `.feature` file, and an OpenAPI spec if present. Skips `target/`, `bin/`, venvs, etc.
+- **generate_tests** — prepends a `[LANGUAGE CONTEXT]` block (from the detected
+  profile) telling the model the glue language, framework, and conventions, then
+  calls the model via OpenRouter with a fallback chain + backoff on 429s. Output is
+  a **delimited block format** (raw file contents between
+  `=== FEATURE|STEPDEF CREATE|UPDATE <path> === … === END ===` markers) — free
+  models reliably fail to JSON-escape source code, so JSON is only a tolerated
+  fallback (with lone-backslash repair). Unparseable output re-enters the retry
+  loop as feedback. Validation retries start from a **different model** in the chain.
 - **validate_output** — structural Gherkin checks (Feature/Scenario present, Outline
-  has Examples, paths, CREATE vs UPDATE consistency, duplicates) **plus
-  step-definition matching**: every generated step must match a cucumber expression
-  parsed from the Java glue — existing or proposed in the same generation. Scenario
-  Outline steps are checked with **every** Examples row substituted (catches `null`
-  in an `{int}` column). Exact offending steps are fed back to the model, up to
-  `TESTGEN_MAX_ATTEMPTS` (default 4) attempts.
-- **run_generated_tests** — runs `mvn test` on what was just written. On failure
-  it parses **both** Java compile errors and per-scenario Cucumber failures
-  (feature → scenario → failing step → assertion message) and feeds them back to
-  `generate_tests`, looping up to `TESTGEN_MAX_TEST_ATTEMPTS` (default 3) times.
-  This is the execution-feedback loop: it catches the *semantic* errors static
-  validation can't — a wrong expected value, a miscomputed total, glue that
-  doesn't compile. Skips gracefully (no blocking) if Maven isn't on PATH, so the
-  agent still runs in a Maven-less environment, just without this loop.
-- **write_features / create_pull_request** — writes files (skipping content-identical
-  ones), commits to a `testgen/...` branch, opens the PR via `gh`. The PR body
-  reports the test status; if the suite still fails after 3 self-correction
-  rounds the PR is opened anyway, **flagged as failing** with the remaining
-  failures, so the work isn't lost and a human (plus the PR's own regression
-  check) takes over. If nothing effectively changed, no PR is opened.
+  has Examples, paths under the test tree, no dropped existing glue, duplicates)
+  **plus step-definition matching**: every generated step must match a step
+  expression parsed from the glue — existing or proposed in the same generation —
+  using the profile's matching style (Java cucumber expressions, C# regex
+  attributes). Scenario Outline steps are checked with **every** Examples row
+  substituted (catches `null` in an `{int}` column). Exact offending steps are fed
+  back, up to `TESTGEN_MAX_ATTEMPTS` (default 6) generations.
+- **write_features** — writes the files (skipping content-identical ones).
+- **run_generated_tests** — runs the project's test command (`mvn test` for Java,
+  `dotnet test` for .NET). On failure it parses **both** compile errors and
+  per-scenario failures (feature → scenario → failing step → assertion message; from
+  the Cucumber JSON report for Java, from `dotnet test` console for .NET) and feeds
+  them back to `generate_tests`, looping up to `TESTGEN_MAX_TEST_ATTEMPTS` (default 3)
+  times. This is the execution-feedback loop: it catches the *semantic* errors static
+  validation can't — a wrong expected value, a miscomputed total, glue that doesn't
+  compile. Skips gracefully (no blocking) if the build tool isn't on PATH.
+- **create_pull_request** — commits to a `testgen/...` branch, opens the PR via `gh`.
+  The PR body reports the test status; if the suite still fails after 3 self-correction
+  rounds the PR is opened anyway, **flagged as failing** with the remaining failures,
+  so the work isn't lost and a human (plus the PR's own regression check) takes over.
+  If nothing effectively changed, no PR is opened.
 
-### Generated Java glue
+### Generated glue
 
 When no existing step pattern can express a behavior, the agent proposes step-definition
-files in `STEPDEF` blocks. Guard rails:
+files in `STEPDEF` blocks, in the detected language. Guard rails:
 
-- must live under `src/test/java/` and contain real `@Given/@When/@Then` annotations
-- an UPDATE must preserve every step definition already in the file
-- shared state (last response, last created entity ids) must go through the
-  scenario-scoped `TestContext` bean — private fields in one glue class are invisible
-  to other glue classes, so "the last created product" steps would fail at runtime
-- glue is validated structurally but **not compiled** by the agent — a Java error
-  surfaces in the PR's regression check, which is why that check must be green
-  before merging
+- must live under the test-source tree and contain real step definitions (Java
+  `@Given/@When/@Then` annotations, or C# `[Given]/[When]/[Then]` attributes)
+- a rewrite must preserve every step definition already in the file (checked
+  whenever the file exists — the CREATE/UPDATE *label* is not load-bearing)
+- shared state (last response, last-created entity ids) must use the same shared
+  mechanism the existing glue uses — the `TestContext` bean (Java) or `TestState`
+  (`.NET`) — never private/static fields, which are invisible across glue classes
+- glue is validated structurally and then **actually compiled and run** by
+  `run_generated_tests`, so a compile error or wrong assertion is caught and
+  self-corrected before the PR (the PR's regression run remains the final backstop)
 
 ### Configuration (env vars)
 
@@ -129,8 +154,11 @@ files in `STEPDEF` blocks. Guard rails:
 | `TESTGEN_MAX_ATTEMPTS` | `6` | generate→validate retry safety cap |
 | `TESTGEN_MAX_TEST_ATTEMPTS` | `3` | run-tests→fix retry budget |
 | `TESTGEN_MAX_CONTEXT_CHARS` | `60000` | per-section context cap |
-| `MAVEN_CMD` | `mvn` | Maven binary; loop is skipped if not found |
-| `TESTGEN_COMPONENT_DIR` | `java-component` | component whose `mvn test` runs |
+| `TESTGEN_TEST_TIMEOUT` | `900` | seconds before a `mvn test` / `dotnet test` run is killed |
+
+The build/test command, component directory, and glue language are **not** env vars
+— they come from the detected `LanguageProfile`. The execution loop is skipped (not
+failed) if the build tool (`mvn` / `dotnet`) isn't on PATH.
 
 ### Agent tests
 
@@ -153,15 +181,16 @@ export OPENROUTER_API_KEY=...
 .venv/bin/python main.py --repo .. --base HEAD~1 --head HEAD
 ```
 
-### Run the regression suite locally
+### Run a regression suite locally
 
 ```bash
-mvn -f java-component/pom.xml verify
+mvn -f java-component/pom.xml verify     # Java  → target/cucumber-report.html
+dotnet test dotnet-component             # .NET  (requires the .NET 8 SDK)
 ```
 
-HTML report: `java-component/target/cucumber-report.html`.
-(Requires JDK 17+ — if `mvn` picks up an older Java, point `JAVA_HOME` at 17,
-e.g. via `~/.mavenrc`.)
+The Java suite needs JDK 17+ — if `mvn` picks up an older Java, point `JAVA_HOME`
+at 17 (e.g. via `~/.mavenrc`). The `dotnet-component` sample is provided as a
+detection target and still needs a `dotnet test` run to verify (see its README).
 
 ## Setup for CI
 
@@ -189,7 +218,8 @@ Run workflow, setting `base` to the commit before the change.
 - Regression check green? (Never merge red — that's how broken scenarios get in.)
 - Expected values match the source exactly (validation messages, computed totals,
   boundary sides)?
-- New glue uses `TestContext` and the "last created <entity>" idiom?
+- New glue uses the shared-state mechanism (`TestContext` / `TestState`) and the
+  "last created <entity>" idiom?
 - Scenarios that *should* exist aren't missing (each changed/added endpoint covered,
   happy + unhappy paths)?
 
@@ -234,8 +264,8 @@ The validator guarantees *structure*, not *meaning*:
   type-incompatible Examples values, CREATE/UPDATE mismatches, glue that drops
   existing step definitions, paths outside the test tree.
 - **Caught by the execution-feedback loop** (`run_generated_tests`, before the PR):
-  Java glue that doesn't compile and scenarios that fail against the real API
-  (wrong status codes, messages, totals) — the agent runs `mvn test`, reads the
+  glue that doesn't compile and scenarios that fail against the real API (wrong
+  status codes, messages, totals) — the agent runs the test command, reads the
   failures, and regenerates up to 3 times. Only failures that survive all 3 rounds
   reach the PR (flagged as failing).
 - **Still caught by the PR's regression run** (defense in depth): anything the
@@ -252,9 +282,14 @@ The validator guarantees *structure*, not *meaning*:
 - Free OpenRouter models are shared pools: upstream 429s and catalog removals
   happen without notice. The model fallback chain + backoff absorbs most of it,
   but a congested hour can still fail a run (re-run from the Actions tab).
-- The agent only reacts to `java-component/src/main/**/*.java` changes — behavior
-  driven from config files (`application.yml`, SQL, properties) is invisible to it.
-- Step matching supports the common cucumber-expression syntax; custom parameter
-  types match loosely, so a wrong-format argument reaches the PR check.
-- One component per repo as wired; multiple components would need per-component
-  workflow paths and prompts.
+- The agent only reacts to a component's **source** changes (`java-component/src/main/**`,
+  `dotnet-component/Api/**`) — behavior driven from config files (`application.yml`,
+  SQL, `appsettings.json`) is invisible to it.
+- Step matching supports common cucumber-expression and regex step syntax; custom
+  parameter types match loosely, so a wrong-format argument reaches the PR check.
+- Two components (Java + .NET) are wired today. Adding another stack is one
+  `LanguageProfile` in `languages.py` plus workflow path entries — the nodes are
+  language-agnostic.
+- The `dotnet-component` sample was authored without the .NET SDK and still needs a
+  `dotnet test` run to confirm it builds; the agent's .NET support (detection, C#
+  glue parsing, `dotnet test` runner + failure parsing) is unit-tested independently.
