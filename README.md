@@ -1,10 +1,24 @@
-# AI-Generated Cucumber Regression Tests
+# AI-Generated BDD Regression Tests (Java + .NET)
 
-A pipeline that keeps a Cucumber regression suite in sync with a Java REST component.
+A pipeline that keeps a Gherkin/BDD regression suite in sync with a REST component.
 When the component's code changes, a Python LangGraph agent analyzes the git diff with
 an LLM (via OpenRouter), generates/updates `.feature` files — and, when needed, new
-Java step definitions — then opens a PR. After manual review and merge, the regression
+step definitions — then opens a PR. After manual review and merge, the regression
 suite runs in CI against the new code.
+
+**Two languages, one agent.** The agent detects the component's language from the
+changed files and adapts every language-specific step:
+
+| | Java component | .NET component |
+|---|---|---|
+| Stack | Spring Boot, Cucumber + JUnit | ASP.NET Core, Reqnroll/SpecFlow + xUnit |
+| Glue | Java `@Given("…")` cucumber expressions | C# `[Given(@"…")]` regex attributes |
+| Test command | `mvn test` | `dotnet test` |
+| Failures read from | `cucumber-report.json` | `dotnet test` console output |
+
+The `.feature`/Gherkin files are identical across both — only the glue language,
+build command, and failure format differ, all encapsulated in a `LanguageProfile`
+(`testgen-agent/testgen/languages.py`). Adding a third stack means adding one profile.
 
 ## Flow
 
@@ -32,7 +46,8 @@ manual review  ──▶  merge
 
 | Path | What it is |
 |---|---|
-| `java-component/` | The component under test: Spring Boot REST API with products (CRUD + price filtering + update/delete guards), orders (tiered bulk discounts, total cap), and reviews (rating bounds, average summary) — bean validation + `@RestControllerAdvice` |
+| `java-component/` | Java component under test: Spring Boot REST API with products (CRUD + price filtering + update/delete guards), orders (tiered bulk discounts, total cap), and reviews (rating bounds, average summary) — bean validation + `@RestControllerAdvice` |
+| `dotnet-component/` | .NET counterpart: ASP.NET Core products API + Reqnroll/xUnit suite. Exists so language detection has a `dotnet` target (see its README; needs `dotnet test` to verify) |
 | `java-component/src/test/resources/features/` | The Cucumber regression suite (what the agent maintains) |
 | `java-component/src/test/java/.../cucumber/` | Test harness: `TestContext` (shared scenario state), step-definition classes, Cucumber/Spring wiring |
 | `testgen-agent/` | Python LangGraph agent that generates the tests |

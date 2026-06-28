@@ -1,74 +1,35 @@
-"""Step-definition matching: verify generated Gherkin steps against Java glue.
+"""Feature-file parsing + step matching, for BOTH languages.
 
 The single biggest failure mode of LLM-generated Gherkin is an invented step
 phrasing with no matching step definition — it passes structural checks, lands
-in the PR, and only fails when Cucumber runs. This module parses the cucumber
-expressions out of the Java glue code and checks every generated step against
-them, so the error is caught pre-PR and fed back to the model.
+in the PR, and only fails when the tests run. This module parses concrete steps
+out of a `.feature` file and checks each against the glue's step expressions
+(extracted per the active LanguageProfile), so the error is caught pre-PR and
+fed back to the model.
 
-Supported cucumber-expression syntax: {int}/{long}/{short}/{byte}/{biginteger},
-{float}/{double}/{bigdecimal}, {word}, {string}, {} (anonymous), optional
-text `(s)`, and alternation `one/two`. Custom parameter types are matched
-loosely (any text) rather than rejected.
+Step extraction and expression→regex compilation are language-specific and live
+in `languages.py` (Java `@Given("…")` cucumber expressions, or C# `[Given(@"…")]`
+regex/cucumber attributes). Feature parsing here is identical for both stacks.
 """
 
 import re
 from typing import Optional
 
-# Matches @Given("..."), @When("..."), etc. in Java source, including escaped
-# quotes inside the annotation string.
-_STEP_ANNOTATION_RE = re.compile(
-    r'@(?:Given|When|Then|And|But)\s*\(\s*"((?:[^"\\]|\\.)*)"'
-)
-
-_PARAM_REGEX = {
-    "int": r"-?\d+",
-    "long": r"-?\d+",
-    "short": r"-?\d+",
-    "byte": r"-?\d+",
-    "biginteger": r"-?\d+",
-    "float": r"-?\d+(?:[.,]\d+)?",
-    "double": r"-?\d+(?:[.,]\d+)?",
-    "bigdecimal": r"-?\d+(?:[.,]\d+)?",
-    "word": r"[^\s]+",
-    "string": r'"[^"]*"',
-    "": r".*",
-}
+from .languages import JAVA, compile_step
+from .languages import extract_step_patterns as _extract_step_patterns
 
 _STEP_KEYWORDS = ("Given ", "When ", "Then ", "And ", "But ", "* ")
 
 
-def _unescape_java_string(s: str) -> str:
-    return s.replace('\\"', '"').replace("\\\\", "\\")
-
-
-def extract_step_patterns(java_source: str) -> list:
-    """Return the cucumber expressions declared in a Java glue file."""
-    return [_unescape_java_string(m.group(1)) for m in _STEP_ANNOTATION_RE.finditer(java_source)]
+def extract_step_patterns(source: str, profile=JAVA) -> list:
+    """Return the step expressions declared in a glue file. Defaults to the Java
+    profile so existing callers/tests keep working."""
+    return _extract_step_patterns(source, profile)
 
 
 def cucumber_expression_to_regex(expr: str):
-    """Compile a cucumber expression into a regex matching concrete step text."""
-    regex_parts = []
-    # Split on {param} placeholders, keeping them as their own tokens.
-    for part in re.split(r"(\{[^{}]*\})", expr):
-        if part.startswith("{") and part.endswith("}"):
-            param = part[1:-1].strip().lower()
-            # Unknown/custom parameter types match loosely instead of failing.
-            regex_parts.append(_PARAM_REGEX.get(param, r".+?"))
-            continue
-        piece = re.escape(part)
-        # Optional text: "product(s)" matches "product" and "products".
-        piece = re.sub(r"\\\(([^()]*?)\\\)", r"(?:\1)?", piece)
-        # Alternation: "is/are" matches "is" or "are". re.escape (3.7+) leaves
-        # "/" unescaped, so split on the literal slash between word tokens.
-        piece = re.sub(
-            r"(\w+(?:/\w+)+)",
-            lambda m: "(?:" + "|".join(m.group(1).split("/")) + ")",
-            piece,
-        )
-        regex_parts.append(piece)
-    return re.compile("^" + "".join(regex_parts) + "$")
+    """Backward-compatible alias for the shared step compiler."""
+    return compile_step(expr)
 
 
 def extract_scenario_steps(gherkin_text: str) -> list:
@@ -152,9 +113,9 @@ def extract_scenario_steps(gherkin_text: str) -> list:
     return steps
 
 
-def find_undefined_steps(gherkin_text: str, step_patterns: list) -> list:
+def find_undefined_steps(gherkin_text: str, step_patterns: list, style: str = "cucumber") -> list:
     """Return generated step texts that match no known step definition."""
-    compiled = [cucumber_expression_to_regex(p) for p in step_patterns]
+    compiled = [compile_step(p, style) for p in step_patterns]
     undefined = []
     for step in extract_scenario_steps(gherkin_text):
         if not any(r.match(step) for r in compiled):

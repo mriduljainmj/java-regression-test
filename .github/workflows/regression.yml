@@ -1,34 +1,71 @@
 # Step 2 of the flow: after the (manually reviewed) test PR merges to main,
-# run the full Cucumber regression suite against the current code.
-name: Cucumber regression
+# run the regression suite for whichever component changed. Java -> Cucumber via
+# Maven; .NET -> Reqnroll via `dotnet test`.
+name: Regression
 
 on:
   push:
     branches: [main]
     paths:
       - "java-component/**"
+      - "dotnet-component/**"
   pull_request:
     paths:
       - "java-component/**"
+      - "dotnet-component/**"
 
 jobs:
-  regression:
+  # Decide which component(s) changed so we only run the relevant suite.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      java: ${{ steps.filter.outputs.java }}
+      dotnet: ${{ steps.filter.outputs.dotnet }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            java:
+              - 'java-component/**'
+            dotnet:
+              - 'dotnet-component/**'
+
+  java:
+    needs: changes
+    if: ${{ needs.changes.outputs.java == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
           cache: maven
-
       - name: Run Cucumber regression suite
         run: mvn -f java-component/pom.xml --batch-mode verify
-
       - name: Upload Cucumber report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cucumber-report
           path: java-component/target/cucumber-report.*
+
+  dotnet:
+    needs: changes
+    if: ${{ needs.changes.outputs.dotnet == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Run Reqnroll regression suite
+        run: dotnet test dotnet-component --logger "trx;LogFileName=results.trx"
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-test-results
+          path: "**/results.trx"

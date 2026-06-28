@@ -13,8 +13,10 @@ from typing import Optional
 from openai import OpenAI
 from pydantic import ValidationError
 
-from .gherkin import extract_step_patterns, find_undefined_steps
+from .gherkin import find_undefined_steps
+from .languages import JAVA, detect_language, extract_step_patterns, profile_for
 from .prompts import (
+    LANGUAGE_CONTEXT_TEMPLATE,
     OUTPUT_FORMAT_INSTRUCTIONS,
     RETRY_SUFFIX_TEMPLATE,
     SYSTEM_PROMPT,
@@ -22,6 +24,11 @@ from .prompts import (
     USER_PROMPT_TEMPLATE,
 )
 from .state import FeatureFile, GenerationResult, StepDefinitionFile, TestGenState
+
+
+def _profile(state: TestGenState):
+    """The active LanguageProfile for this run (defaults to Java)."""
+    return profile_for(state.get("language", "java"))
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +40,6 @@ MAX_ATTEMPTS = int(os.environ.get("TESTGEN_MAX_ATTEMPTS", "6"))
 # model, at most this many times (the user-facing "max 3 retries").
 MAX_TEST_ATTEMPTS = int(os.environ.get("TESTGEN_MAX_TEST_ATTEMPTS", "3"))
 
-# Maven command + the component to test. Override MAVEN_CMD if mvn isn't on PATH.
-MVN = os.environ.get("MAVEN_CMD", "mvn")
-COMPONENT_DIR = os.environ.get("TESTGEN_COMPONENT_DIR", "java-component")
 TEST_TIMEOUT = int(os.environ.get("TESTGEN_TEST_TIMEOUT", "900"))
 
 # Per-section guardrail for very large diffs/sources. ~15K tokens per section —
@@ -55,10 +59,6 @@ else:
         "openai/gpt-oss-20b:free",
         "google/gemma-4-26b-a4b-it:free",
     ]
-
-JAVA_SOURCE_MARKER = "src/main/java"
-JAVA_TEST_MARKER = "src/test/java"
-FEATURES_DIR_MARKER = "src/test/resources/features"
 
 # GitHub sends this as `before` on the first push to a branch.
 _ZERO_SHA = re.compile(r"^0{7,40}$")
@@ -132,11 +132,20 @@ def collect_diff(state: TestGenState) -> TestGenState:
     changed = _run(["git", "diff", "--name-only", f"{base}..{head}"], cwd=repo)
     changed_files = [line.strip() for line in changed.splitlines() if line.strip()]
 
-    java_changes = [f for f in changed_files if JAVA_SOURCE_MARKER in f and f.endswith(".java")]
-    update: TestGenState = {"git_diff": diff, "changed_files": changed_files}
-    if not java_changes:
+    # Detect the language from the changed files, then apply that profile's
+    # notion of "main source" to decide whether there's anything to test.
+    profile = detect_language(repo, changed_files)
+    logger.info("Detected language: %s", profile.label)
+    src_changes = [
+        f for f in changed_files
+        if profile.source_marker in f and f.endswith(profile.source_ext)
+    ]
+    update: TestGenState = {
+        "git_diff": diff, "changed_files": changed_files, "language": profile.name,
+    }
+    if not src_changes:
         update["skipped_reason"] = (
-            "No Java main-source changes between "
+            f"No {profile.label} main-source changes between "
             f"{base} and {head}; nothing to generate tests for."
         )
     return update
@@ -146,38 +155,39 @@ def gather_context(state: TestGenState) -> TestGenState:
     """Read source files, glue code, existing features, and any API spec."""
     repo = Path(state["repo_path"])
     changed_files = state["changed_files"]
+    profile = _profile(state)
 
-    # All main-source Java files, with the changed ones FIRST so truncation by
+    # All main-source files, with the changed ones FIRST so truncation by
     # MAX_CONTEXT_CHARS sacrifices the least relevant context. The model needs
     # the unchanged files too: stale-assertion detection means executing the
     # existing scenarios against the post-change code, and the behavior an
     # assertion depends on often lives outside the diffed files.
-    changed_java = [
+    changed_src = [
         rel for rel in changed_files
-        if JAVA_SOURCE_MARKER in rel and rel.endswith(".java")
+        if profile.source_marker in rel and rel.endswith(profile.source_ext)
     ]
-    other_java = [
+    other_src = [
         str(p.relative_to(repo))
-        for p in _iter_repo_files(repo, "*.java")
-        if JAVA_SOURCE_MARKER in str(p) and str(p.relative_to(repo)) not in changed_java
+        for p in _iter_repo_files(repo, f"*{profile.source_ext}")
+        if profile.source_marker in str(p) and str(p.relative_to(repo)) not in changed_src
     ]
     sources: list = []
-    for rel in changed_java + other_java:
+    for rel in changed_src + other_src:
         path = repo / rel
         if path.is_file():
-            marker = "CHANGED IN THIS DIFF" if rel in changed_java else "unchanged"
+            marker = "CHANGED IN THIS DIFF" if rel in changed_src else "unchanged"
             sources.append(f"// FILE ({marker}): {rel}\n{_read(path)}")
 
     # Glue code is the reuse contract. Find it by content (any test-source file
-    # with @Given/@When/@Then annotations), not by file-naming convention, and
-    # keep the parsed cucumber expressions for the post-generation validator.
+    # with step annotations/attributes), not by file-naming convention, and keep
+    # the parsed step expressions for the post-generation validator.
     step_patterns: list = []
-    for java in _iter_repo_files(repo, "*.java"):
-        rel = str(java.relative_to(repo))
-        if JAVA_TEST_MARKER not in rel:
+    for src in _iter_repo_files(repo, f"*{profile.glue_ext}"):
+        rel = str(src.relative_to(repo))
+        if profile.test_marker not in rel:
             continue
-        text = _read(java)
-        patterns = extract_step_patterns(text)
+        text = _read(src)
+        patterns = extract_step_patterns(text, profile)
         if patterns:
             step_patterns.extend(patterns)
             sources.append(f"// FILE (step definitions): {rel}\n{text}")
@@ -246,7 +256,7 @@ def _parse_file_blocks(text: str) -> GenerationResult:
             ))
         else:
             stepdefs.append(StepDefinitionFile(
-                file_name=path, action=action.upper(), java_content=content,
+                file_name=path, action=action.upper(), content=content,
             ))
 
     return GenerationResult(
@@ -326,7 +336,16 @@ def generate_tests(state: TestGenState) -> TestGenState:
         },
     )
 
-    user_prompt = USER_PROMPT_TEMPLATE.format(
+    profile = _profile(state)
+    user_prompt = LANGUAGE_CONTEXT_TEMPLATE.format(
+        label=profile.label,
+        glue_language=profile.glue_language,
+        framework=profile.framework,
+        glue_ext=profile.glue_ext,
+        features_marker=profile.features_marker,
+        test_marker=profile.test_marker,
+        notes=profile.prompt_notes,
+    ) + USER_PROMPT_TEMPLATE.format(
         target_component_context=state["target_component_context"],
         git_diff=state["git_diff"][:MAX_CONTEXT_CHARS],
         existing_feature_examples=state["existing_feature_examples"],
@@ -425,11 +444,12 @@ def validate_output(state: TestGenState) -> TestGenState:
         return {}
 
     repo = Path(state["repo_path"]).resolve()
+    profile = _profile(state)
     step_patterns = state.get("step_patterns", [])
     errors: list = []
     seen_names = set()
 
-    # Validate proposed Java glue first: its step patterns extend the set the
+    # Validate proposed glue first: its step patterns extend the set the
     # generated Gherkin is allowed to use.
     generated_patterns: list = []
     for glue in generation.new_or_modified_step_definitions:
@@ -440,18 +460,19 @@ def validate_output(state: TestGenState) -> TestGenState:
             errors.append(f"{name}: appears more than once in the output")
         seen_names.add(name)
 
-        if not name.endswith(".java"):
-            errors.append(f"{name}: step-definition file name must end with .java")
-        if JAVA_TEST_MARKER not in name:
-            errors.append(f"{name}: step definitions must live under {JAVA_TEST_MARKER}/")
+        if not name.endswith(profile.glue_ext):
+            errors.append(f"{name}: step-definition file name must end with {profile.glue_ext}")
+        if profile.test_marker not in name:
+            errors.append(f"{name}: step definitions must live under a {profile.test_marker} path")
         if not target.is_relative_to(repo):
             errors.append(f"{name}: path escapes the repository root")
 
-        patterns_in_file = extract_step_patterns(glue.java_content)
+        patterns_in_file = extract_step_patterns(glue.content, profile)
         if not patterns_in_file:
             errors.append(
-                f"{name}: contains no @Given/@When/@Then step definitions — "
-                "if no new glue is needed, return an empty new_or_modified_step_definitions list"
+                f"{name}: contains no step definitions ({profile.glue_language} "
+                "step annotations/attributes) — if no new glue is needed, return "
+                "an empty new_or_modified_step_definitions list"
             )
         # The real invariant (independent of the CREATE/UPDATE label): if the file
         # already exists, the new content must keep every step it currently has —
@@ -460,7 +481,7 @@ def validate_output(state: TestGenState) -> TestGenState:
         # it makes the retry loop thrash once a prior attempt has written the file.
         if target.is_file():
             removed = [
-                p for p in extract_step_patterns(_read(target))
+                p for p in extract_step_patterns(_read(target), profile)
                 if p not in patterns_in_file
             ]
             if removed:
@@ -484,8 +505,8 @@ def validate_output(state: TestGenState) -> TestGenState:
 
         if not name.endswith(".feature"):
             errors.append(f"{name}: file name must end with .feature")
-        if FEATURES_DIR_MARKER not in name:
-            errors.append(f"{name}: must live under {FEATURES_DIR_MARKER}/")
+        if profile.features_marker not in name:
+            errors.append(f"{name}: must live under a {profile.features_marker} path")
         if not target.is_relative_to(repo):
             errors.append(f"{name}: path escapes the repository root")
         # No CREATE/UPDATE-vs-existence check: the model returns full feature
@@ -506,7 +527,7 @@ def validate_output(state: TestGenState) -> TestGenState:
         # proposed in this generation — or Cucumber will fail the PR with
         # undefined steps. Feed exact offenders back.
         if all_patterns:
-            for step in find_undefined_steps(feature.gherkin_content, all_patterns):
+            for step in find_undefined_steps(feature.gherkin_content, all_patterns, profile.step_style):
                 message = (
                     f'{name}: step "{step}" matches no existing step definition. '
                     "Rephrase it using one of the step patterns from the provided "
@@ -536,7 +557,7 @@ def write_features(state: TestGenState) -> TestGenState:
 
     outputs = [(f.file_name, f.action, f.gherkin_content)
                for f in generation.new_or_modified_features]
-    outputs += [(g.file_name, g.action, g.java_content)
+    outputs += [(g.file_name, g.action, g.content)
                 for g in generation.new_or_modified_step_definitions]
 
     for file_name, _action, raw_content in outputs:
@@ -556,19 +577,24 @@ def write_features(state: TestGenState) -> TestGenState:
     return {"written_files": written}
 
 
-def _extract_compile_errors(mvn_output: str) -> list:
-    """Pull Java compiler errors out of mvn output (build failed before tests)."""
+def _extract_compile_errors(output: str, profile) -> list:
+    """Pull compiler errors out of the build output (build failed before tests)."""
     errors = []
-    for line in mvn_output.splitlines():
-        # e.g. "[ERROR] /path/Foo.java:[12,34] cannot find symbol"
-        if ".java:[" in line and "ERROR" in line:
-            errors.append(line.split("ERROR]", 1)[-1].strip())
-    return errors[:25]
+    for line in output.splitlines():
+        if profile.name == "java":
+            # e.g. "[ERROR] /path/Foo.java:[12,34] cannot find symbol"
+            if ".java:[" in line and "ERROR" in line:
+                errors.append(line.split("ERROR]", 1)[-1].strip())
+        else:  # dotnet — "Foo.cs(12,34): error CS0103: The name 'x' ..."
+            if "error CS" in line:
+                errors.append(line.strip())
+    # De-dupe (dotnet repeats errors across projects), cap.
+    return list(dict.fromkeys(errors))[:25]
 
 
-def _extract_scenario_failures(repo: Path) -> list:
+def _extract_scenario_failures_java(repo: Path, profile) -> list:
     """Parse the Cucumber JSON report for failed scenarios + the reason."""
-    report_path = repo / COMPONENT_DIR / "target" / "cucumber-report.json"
+    report_path = repo / profile.component_dir / profile.report_rel
     if not report_path.is_file():
         return []
     try:
@@ -597,29 +623,62 @@ def _extract_scenario_failures(repo: Path) -> list:
     return failures
 
 
-def run_generated_tests(state: TestGenState) -> TestGenState:
-    """Run `mvn test` on the written tests; on failure, capture *why* (compile
-    errors and per-scenario failures) so the model can correct itself.
+# `dotnet test` console: "  Failed Namespace.Scenario_xyz [12 ms]" then an
+# indented "Error Message:" / assertion line.
+_DOTNET_FAIL_RE = re.compile(r"^\s*(?:Failed|\[FAIL\])\s+(.+?)(?:\s+\[[\d.]+\s*\w+\])?\s*$")
 
-    Skips gracefully (tests_passed=True) when there's nothing to run or Maven
-    isn't available, so the agent still works in a Maven-less environment — just
-    without execution feedback."""
-    repo = Path(state["repo_path"]).resolve()  # absolute, so mvn -f and cwd agree
+
+def _extract_scenario_failures_dotnet(output: str) -> list:
+    """Parse `dotnet test` console output for failed tests + the message."""
+    lines = output.splitlines()
+    failures = []
+    for i, line in enumerate(lines):
+        m = _DOTNET_FAIL_RE.match(line)
+        if not m:
+            continue
+        name = m.group(1).strip()
+        # The assertion/error message usually follows within a few lines. Skip the
+        # bare "Error Message:" header and grab the actual assertion text.
+        why = ""
+        for nxt in lines[i + 1:i + 6]:
+            s = nxt.strip()
+            if not s or s == "Error Message:":
+                continue
+            if s.startswith(("Assert", "Expected:", "Actual:", "System.")) or "Expected" in s:
+                why = s
+                break
+        failures.append(f'- {name}: {why}')
+    return list(dict.fromkeys(failures))
+
+
+def run_generated_tests(state: TestGenState) -> TestGenState:
+    """Run the generated tests (`mvn test` for Java, `dotnet test` for .NET); on
+    failure, capture *why* (compile errors + per-scenario failures) so the model
+    can correct itself.
+
+    Skips gracefully (tests_passed=True) when there's nothing to run or the build
+    tool isn't available, so the agent still works in a toolchain-less environment
+    — just without execution feedback."""
+    repo = Path(state["repo_path"]).resolve()  # absolute, so paths and cwd agree
+    profile = _profile(state)
 
     if not state.get("written_files"):
         return {"tests_passed": True, "test_failures": [],
                 "test_report": "no files written; nothing to run"}
 
-    if shutil.which(MVN) is None:
-        logger.warning("'%s' not found on PATH — skipping test execution", MVN)
+    component = repo / profile.component_dir
+    # Fill the command template: {pom} for Java, {dir} for .NET.
+    pom = str(component / "pom.xml")
+    cmd = [arg.format(pom=pom, dir=str(component)) for arg in profile.test_cmd]
+    tool = cmd[0]
+    if shutil.which(tool) is None:
+        logger.warning("'%s' not found on PATH — skipping test execution", tool)
         return {"tests_passed": True, "test_failures": [],
-                "test_report": "test execution skipped (Maven not available in this environment)"}
+                "test_report": f"test execution skipped ({tool} not available in this environment)"}
 
-    pom = str(repo / COMPONENT_DIR / "pom.xml")
-    logger.info("Running generated tests: %s -B -f %s test", MVN, pom)
+    logger.info("Running generated tests: %s", " ".join(cmd))
     proc = subprocess.run(
-        [MVN, "-B", "-f", pom, "test"],
-        cwd=str(repo), capture_output=True, text=True, timeout=TEST_TIMEOUT,
+        cmd, cwd=str(repo), capture_output=True, text=True, timeout=TEST_TIMEOUT,
     )
 
     if proc.returncode == 0:
@@ -630,20 +689,24 @@ def run_generated_tests(state: TestGenState) -> TestGenState:
     test_attempts = state.get("test_attempts", 0) + 1
     output = proc.stdout + "\n" + proc.stderr
 
-    compile_errors = _extract_compile_errors(output)
-    scenario_failures = _extract_scenario_failures(repo)
+    compile_errors = _extract_compile_errors(output, profile)
+    if profile.report_rel:
+        scenario_failures = _extract_scenario_failures_java(repo, profile)
+    else:
+        scenario_failures = _extract_scenario_failures_dotnet(output)
 
     feedback: list = []
     if compile_errors:
-        feedback.append("COMPILATION ERROR (the generated Java does not compile):")
+        feedback.append(
+            f"COMPILATION ERROR (the generated {profile.glue_language} does not compile):")
         feedback += [f"- {e}" for e in compile_errors]
     if scenario_failures:
         feedback.append("SCENARIO FAILURES:")
         feedback += scenario_failures
     if not feedback:
-        # mvn failed for some other reason — hand back the tail so it's not opaque.
+        # The build failed for some other reason — hand back the tail.
         tail = "\n".join(output.splitlines()[-25:])
-        feedback.append("`mvn test` failed; tail of the output:\n" + tail)
+        feedback.append(f"`{' '.join(cmd)}` failed; tail of the output:\n" + tail)
 
     logger.warning("Test attempt %d failed (%d compile, %d scenario)",
                    test_attempts, len(compile_errors), len(scenario_failures))

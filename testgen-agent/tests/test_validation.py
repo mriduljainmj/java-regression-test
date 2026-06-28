@@ -61,7 +61,7 @@ class GlueValidationTest(unittest.TestCase):
                 ),
             )],
             new_or_modified_step_definitions=[StepDefinitionFile(
-                file_name=GLUE_PATH, action="CREATE", java_content=NEW_GLUE,
+                file_name=GLUE_PATH, action="CREATE", content=NEW_GLUE,
             )],
         )
         out = validate_output(make_state(self.repo, generation))
@@ -94,7 +94,7 @@ class GlueValidationTest(unittest.TestCase):
                 impacted_endpoints=[], analysis_summary="x",
                 new_or_modified_features=[],
                 new_or_modified_step_definitions=[StepDefinitionFile(
-                    file_name=GLUE_PATH, action=label, java_content=NEW_GLUE,
+                    file_name=GLUE_PATH, action=label, content=NEW_GLUE,
                 )],
             )
             out = validate_output(make_state(self.repo, generation))
@@ -131,7 +131,7 @@ class GlueValidationTest(unittest.TestCase):
             new_or_modified_step_definitions=[StepDefinitionFile(
                 file_name="component/src/main/java/com/example/Steps.java",
                 action="CREATE",
-                java_content=NEW_GLUE,
+                content=NEW_GLUE,
             )],
         )
         out = validate_output(make_state(self.repo, generation))
@@ -144,11 +144,11 @@ class GlueValidationTest(unittest.TestCase):
             new_or_modified_features=[],
             new_or_modified_step_definitions=[StepDefinitionFile(
                 file_name=GLUE_PATH, action="CREATE",
-                java_content="public class Empty {}",
+                content="public class Empty {}",
             )],
         )
         out = validate_output(make_state(self.repo, generation))
-        self.assertTrue(any("contains no @Given/@When/@Then" in e
+        self.assertTrue(any("contains no step definitions" in e
                             for e in out["validation_errors"]))
 
 

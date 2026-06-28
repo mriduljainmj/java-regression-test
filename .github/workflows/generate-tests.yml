@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - "java-component/src/main/**"
+      - "dotnet-component/Api/**"
   workflow_dispatch:
     inputs:
       base:
@@ -32,13 +33,18 @@ jobs:
         with:
           python-version: "3.12"
 
-      # The agent runs `mvn test` on what it generates and self-corrects from
-      # the failures, so the job needs a JDK + Maven too.
+      # The agent runs the project's test command on what it generates and
+      # self-corrects from the failures. The component's language is detected at
+      # runtime, so both toolchains are set up here (Java + .NET).
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
           cache: maven
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
 
       - name: Install agent dependencies
         run: pip install -r testgen-agent/requirements.txt

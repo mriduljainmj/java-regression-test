@@ -43,7 +43,7 @@ class BlockFormatTest(unittest.TestCase):
         # point of leaving JSON behind.
         g = _parse_generation(BLOCK_OUTPUT)
         self.assertIn('String body = "{\\"rating\\": " + rating + "}";',
-                      g.new_or_modified_step_definitions[0].java_content)
+                      g.new_or_modified_step_definitions[0].content)
 
     def test_gherkin_content_intact(self):
         g = _parse_generation(BLOCK_OUTPUT)

@@ -6,18 +6,19 @@ from pydantic import BaseModel, Field
 
 
 class FeatureFile(BaseModel):
-    """One Cucumber feature file to create or update."""
+    """One Gherkin .feature file to create or update (same format for Cucumber
+    and Reqnroll/SpecFlow)."""
 
     file_name: str = Field(
-        description="Path of the feature file relative to the repository root, "
-        "e.g. java-component/src/test/resources/features/product_pricing.feature"
+        description="Path of the .feature file relative to the repository root"
     )
     action: Literal["CREATE", "UPDATE"]
     gherkin_content: str = Field(description="Full Gherkin content of the feature file")
 
 
 class StepDefinitionFile(BaseModel):
-    """One Java step-definition (glue) file to create or update.
+    """One step-definition (glue) file to create or update — Java for Cucumber or
+    C# for Reqnroll/SpecFlow, depending on the detected language.
 
     Only needed when the required behavior cannot be expressed with existing
     step patterns. UPDATE content must be the FULL file and must preserve every
@@ -25,11 +26,10 @@ class StepDefinitionFile(BaseModel):
     """
 
     file_name: str = Field(
-        description="Path relative to the repository root, under src/test/java/, "
-        "e.g. java-component/src/test/java/com/example/products/cucumber/OrderStepDefinitions.java"
+        description="Path relative to the repository root, under the test-source tree"
     )
     action: Literal["CREATE", "UPDATE"]
-    java_content: str = Field(description="Full Java source of the step-definition file")
+    content: str = Field(description="Full source of the step-definition file")
 
 
 class GenerationResult(BaseModel):
@@ -52,13 +52,16 @@ class TestGenState(TypedDict, total=False):
     head_ref: str
     create_pr: bool
 
+    # Detected language profile (java | dotnet)
+    language: str
+
     # Gathered context
     git_diff: str
     changed_files: list[str]
     target_component_context: str
     existing_feature_examples: str
     api_spec: str
-    step_patterns: list[str]  # cucumber expressions parsed from Java glue code
+    step_patterns: list[str]  # step expressions parsed from the glue code
 
     # Generation + validation loop
     generation: Optional[GenerationResult]

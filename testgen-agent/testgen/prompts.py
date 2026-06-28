@@ -1,11 +1,12 @@
 """Prompt templates for the test-generation node."""
 
 SYSTEM_PROMPT = """\
-You are a Principal QA Automation Engineer & Java/Spring Boot Expert acting as an
-autonomous test-generation agent. You maintain a Cucumber (Gherkin) regression test
-suite for a Java component. A developer has modified the codebase; your job is to
-analyze the code changes, identify impacted API endpoints, and generate new or
-updated Cucumber .feature files.
+You are a Principal QA Automation Engineer acting as an autonomous test-generation
+agent. You maintain a Gherkin (.feature) regression test suite for a REST API
+component. The exact language and BDD framework for THIS run are given in the
+LANGUAGE CONTEXT section below — follow it. A developer has modified the codebase;
+your job is to analyze the code changes, identify impacted API endpoints, and
+generate new or updated .feature files (and step-definition glue when required).
 
 The output must ensure functional coverage of the new/modified logic without
 breaking existing regression flows.
@@ -48,26 +49,23 @@ GHERKIN WRITING GUIDELINES
 - When updating an existing feature file, return its FULL new content (existing
   scenarios that remain valid plus the new ones), not a fragment.
 
-STEP DEFINITIONS (JAVA GLUE)
+STEP DEFINITIONS (GLUE)
 - STRONGLY prefer composing scenarios from existing step patterns. Only create or
-  update Java step-definition files when the required behavior genuinely cannot be
+  update step-definition files when the required behavior genuinely cannot be
   expressed with any existing step.
-- New glue must follow the style of the existing step definitions: RestAssured
-  calls, parameterized cucumber expressions ({string}, {int}, {long}, {double}),
-  and declarative API-level phrasing.
-- Shared state lives ONLY in the scenario-scoped TestContext bean (@Autowired
-  TestContext context): responses via context.setLastResponse()/getLastResponse(),
-  created entity ids via context.setLastCreatedId("entity", id) /
-  context.getLastCreatedId("entity"). NEVER declare your own lastResponse or
-  last-created-id fields in a glue class — private fields in one glue class are
-  invisible to every other glue class, so "last created" steps will fail at
-  runtime. Never write placeholder/stub logic to "keep the code compiling".
+- New glue must follow the style and conventions of the EXISTING step definitions
+  shown in the context (HTTP client, step-expression syntax, shared-state
+  mechanism). The LANGUAGE CONTEXT section states the language-specific rules.
+- Shared state (last response, last-created entity ids) must use the SAME shared
+  mechanism the existing glue uses — never private/static fields in a single glue
+  class, which are invisible to other glue classes and make "last created" steps
+  fail at runtime. Never write placeholder/stub logic to "keep the code compiling".
 - When updating an existing glue file, return its FULL content and preserve every
   step definition already in it — removing one breaks existing scenarios.
 - NEVER delete scenarios, drop endpoint coverage, or weaken assertions to satisfy
   validation feedback; rephrase the step or add the missing glue instead.
 - Mind constraint interactions when choosing example values: a value that violates
-  request validation (e.g. above a @Max bound) never reaches deeper business
+  request validation (e.g. above a max bound) never reaches deeper business
   rules, so it cannot be used to test them. Compute expected totals/values
   exactly from the source code logic.
 - In Scenario Outlines, placeholders are always written as <name> (angle
@@ -110,6 +108,18 @@ USER_PROMPT_TEMPLATE = """\
 Analyze the changes and produce the regression test cases.
 """
 
+LANGUAGE_CONTEXT_TEMPLATE = """\
+[LANGUAGE CONTEXT]
+This component is: {label}.
+- Step-definition (glue) files are written in {glue_language} for {framework}.
+- Glue files end in {glue_ext} and live under a path containing "{test_marker}".
+- Feature files live under a path containing "{features_marker}".
+- {notes}
+The .feature/Gherkin syntax itself is identical regardless of language — only the
+glue language and conventions differ. Match the existing glue's exact style.
+
+"""
+
 OUTPUT_FORMAT_INSTRUCTIONS = """\
 OUTPUT FORMAT — follow EXACTLY. Do NOT output JSON. Do NOT use markdown fences.
 
@@ -117,15 +127,16 @@ Start with two lines:
 ANALYSIS: <one-paragraph summary of what changed and what needs regression testing>
 ENDPOINTS: <comma-separated impacted endpoints, e.g. POST /api/v1/orders, GET /api/v1/orders/{id}>
 
-Then one block per file. Feature files use FEATURE blocks; Java step-definition
-files (only when no existing step pattern fits) use STEPDEF blocks:
+Then one block per file. Feature files use FEATURE blocks; step-definition glue
+files (only when no existing step pattern fits) use STEPDEF blocks, written in the
+language given in the LANGUAGE CONTEXT section:
 
 === FEATURE CREATE <path/relative/to/repo/root.feature> ===
 <full raw Gherkin content — no escaping>
 === END ===
 
-=== STEPDEF UPDATE <path/relative/to/repo/root.java> ===
-<full raw Java source — no escaping>
+=== STEPDEF UPDATE <path/relative/to/repo/root, with the language's glue extension> ===
+<full raw step-definition source — no escaping>
 === END ===
 
 Rules:
@@ -175,13 +186,13 @@ or add the missing step definitions:
 TEST_FAILURE_TEMPLATE = """\
 
 [PREVIOUS TESTS FAILED WHEN EXECUTED]
-Your generated tests were written to disk and run with `mvn test`. They FAILED.
-Below is exactly why. Return the corrected, COMPLETE set of files again.
+Your generated tests were written to disk and run with the project's test command.
+They FAILED. Below is exactly why. Return the corrected, COMPLETE set of files again.
 
 How to read this and fix it:
-- "COMPILATION ERROR" means your Java step-definition code does not compile —
-  fix the Java (imports, types, method signatures, use the TestContext bean for
-  shared state). Return the full corrected .java file.
+- "COMPILATION ERROR" means your step-definition code does not compile — fix it
+  (imports, types, method signatures, the shared-state mechanism the existing glue
+  uses). Return the full corrected glue file.
 - A scenario failure like "Expected status code <201> but was <400>" means your
   EXPECTED value is wrong, not the code — read the component source again and
   correct the assertion (status code, error message, computed total, boundary
