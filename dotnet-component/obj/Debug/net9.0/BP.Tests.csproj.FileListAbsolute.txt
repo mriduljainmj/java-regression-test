@@ -1,3 +1,9 @@
+C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.Tests.csproj.AssemblyReference.cache
+C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.Tests.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.Tests.AssemblyInfoInputs.cache
+C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.Tests.AssemblyInfo.cs
+C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.Tests.csproj.CoreCompileInputs.cache
+C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.Tests.sourcelink.json
 C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin\Debug\net9.0\BP.deps.json
 C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin\Debug\net9.0\BP.runtimeconfig.json
 C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin\Debug\net9.0\appsettings.Development.json
@@ -110,12 +116,6 @@ C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin\Debug\net
 C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin\Debug\net9.0\zh-Hant\Microsoft.VisualStudio.TestPlatform.Common.resources.dll
 C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin\Debug\net9.0\runtimes\win\lib\netstandard2.0\System.Security.Cryptography.ProtectedData.dll
 C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin\Debug\net9.0\BP.pdb
-C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.Tests.csproj.AssemblyReference.cache
-C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.Tests.GeneratedMSBuildEditorConfig.editorconfig
-C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.Tests.AssemblyInfoInputs.cache
-C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.Tests.AssemblyInfo.cs
-C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.Tests.csproj.CoreCompileInputs.cache
-C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.Tests.sourcelink.json
 C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.Tests.csproj.Up2Date
 C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\BP.Tests.dll
 C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\obj\Debug\net9.0\refint\BP.Tests.dll
