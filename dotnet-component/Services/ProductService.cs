@@ -77,5 +77,19 @@ namespace BP.Services
         }
 
         public int GetProductInventoryCount() => _products.Count(p => p.InStock);
+
+        public double ApplyStoreDiscount(int productId, double discountPercent)
+        {
+            var product = GetById(productId);
+            if (product == null) throw new ArgumentException($"Product {productId} not found");
+            
+            // Validate discount percentage (0-100)
+            if (discountPercent < 0 || discountPercent > 100)
+                throw new ArgumentException("Discount must be between 0 and 100");
+            
+            // Apply store-wide discount
+            double discountedPrice = product.Price * (1 - (discountPercent / 100.0));
+            return discountedPrice;
+        }
     }
 }
