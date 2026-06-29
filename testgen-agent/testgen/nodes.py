@@ -658,6 +658,26 @@ def validate_output(state: TestGenState) -> TestGenState:
                     )
                 errors.append(message)
 
+    # CRITICAL: If .NET source code changed, there MUST be at least one feature file
+    # This prevents the LLM from outputting empty responses for .NET changes
+    if project_type == "dotnet":
+        git_diff = state.get("git_diff", "")
+        dotnet_files_changed = any(
+            ".cs" in line or ".csproj" in line or "Program.cs" in line
+            for line in git_diff.split("\n")
+        )
+        if dotnet_files_changed and not generation.new_or_modified_features:
+            errors.append(
+                "❌ CRITICAL VALIDATION FAILURE:\n"
+                ".NET source code changed (detected *.cs or *.csproj files in diff), "
+                "but ZERO feature files were generated.\n"
+                "The LLM MUST generate at least one SpecFlow feature file for every "
+                "new or modified .NET endpoint. \n"
+                "This is a required regression test — do not output an empty file list.\n"
+                "RETRY: Call the LLM again, and instruct it to generate a SpecFlow feature "
+                "for the changed endpoint(s)."
+            )
+
     if errors:
         logger.warning("Validation failed (attempt %d): %s", state["attempts"], errors)
     return {"validation_errors": errors}

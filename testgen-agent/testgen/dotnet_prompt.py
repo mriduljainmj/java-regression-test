@@ -10,6 +10,15 @@ identify impacted public API behavior, and generate new or updated SpecFlow
 The output must ensure functional coverage of the new/modified logic without
 breaking existing regression flows.
 
+⚠️ CRITICAL MANDATE: YOU MUST GENERATE NEW SPECFLOW TESTS FOR:
+ 1. Every NEW endpoint added to Controllers/ or Program.cs
+ 2. Every MODIFIED endpoint (changed behavior, new parameters, new validations)
+ 3. Every MODIFIED business service method (ProductService, etc.)
+
+DO NOT output "no tests needed" or "no impacted scenarios" if .NET source code changed.
+Always output at least one feature file when there are .NET source changes.
+If you see changed .cs files that could affect observable API behavior, generate tests.
+
 CRITICAL ANALYSIS STEPS
 
 1. Identify Endpoints
@@ -17,6 +26,7 @@ CRITICAL ANALYSIS STEPS
   - Inspect action attributes: `[HttpGet]`, `[HttpPost]`, `[HttpPut]`, `[HttpDelete]`, `[HttpPatch]`.
   - Inspect minimal APIs in `Program.cs`/startup: `MapGet`, `MapPost`, `MapPut`, `MapDelete`.
   - Capture route templates, route constraints, query vs route vs body parameters, and DTO types.
+  - MARK EACH ENDPOINT AS NEW, MODIFIED, OR UNCHANGED based on git diff.
 
 2. Analyze Business Logic
   - Validation: data-annotations (`[Required]`, `[Range]`, `[StringLength]`) and FluentValidation rules.
@@ -27,6 +37,8 @@ CRITICAL ANALYSIS STEPS
   - File uploads (`IFormFile`), cancellation tokens, and async behaviors.
 
 3. Determine Regression Scope
+  - For EVERY NEW or MODIFIED endpoint: Generate at least one scenario covering the happy path.
+  - For EVERY NEW endpoint: Generate additional scenarios for edge cases (invalid input, auth, errors).
   - Which existing scenarios could observe changed behavior (status code, body, header, or message)?
 
 4. Detect Stale Assertions
@@ -40,6 +52,11 @@ GHERKIN WRITING GUIDELINES
  - Include header checks when behavior depends on headers (e.g., `Accept`, auth tokens, custom headers).
  - For file uploads include `multipart/form-data` cases and invalid-file scenarios.
  - NEVER reference auto-generated IDs directly; use the "last created <entity>" idiom.
+
+MANDATORY OUTPUT RULE
+ - If analysis identifies new or modified .NET endpoints → ALWAYS generate feature files.
+ - Do NOT output empty file lists even if Java wasn't touched.
+ - If there are .NET source code changes → output is ALWAYS at least one FEATURE block.
 
 STEP MATCHING CONTRACT (CRITICAL)
  - Steps MUST match existing SpecFlow bindings (`[Given]`, `[When]`, `[Then]`) exactly.
@@ -109,6 +126,7 @@ OUTPUT & SAFETY RULES
  - ALWAYS return full feature files and full glue files when creating or updating (no partial fragments).
  - DO NOT change existing step wording, remove scenarios, or weaken assertions to make tests pass.
  - DO NOT hallucinate endpoints or behaviors—use only the provided source and git diff.
+ - ⚠️ CRITICAL: DO NOT OUTPUT EMPTY FILE LISTS when .NET code changed. Output ALWAYS includes FEATURE blocks.
 
 EXECUTION CHECK (MANDATORY)
 Before returning output ensure:
@@ -116,6 +134,7 @@ Before returning output ensure:
  - `ScenarioContext` is used for shared state.
  - Expected values (status codes, messages, response fields) exactly match source behavior.
  - Feature files are syntactically valid Gherkin.
+ - If .NET source code changed, at least one FEATURE block is in the output.
 
 CONSTRAINTS
  - Feature file paths must be relative to the repo root and placed under `dotnet-component/Tests/Features/`.
@@ -144,6 +163,19 @@ USER_PROMPT_TEMPLATE = """\
 {api_spec}
 
 Analyze the changes and produce the regression test cases.
+
+⚠️ CRITICAL REQUIREMENT: 
+If you observe ANY .NET source code changes (*.cs files, controllers, services, Program.cs):
+  1. IDENTIFY all NEW or MODIFIED endpoints
+  2. GENERATE at least one SpecFlow feature file per new/modified endpoint
+  3. DO NOT output empty file lists just because Java wasn't touched
+  4. Include both happy-path and edge-case scenarios (invalid input, errors, auth failures)
+
+Your output MUST include:
+  - ANALYSIS line describing the changes
+  - ENDPOINTS line listing all impacted API endpoints
+  - At least one === FEATURE CREATE/UPDATE ... === block for new/modified endpoint coverage
+  - Any === STEPDEF CREATE/UPDATE ... === blocks for new step definitions needed
 
 IMPORTANT: If there are no existing SpecFlow step definitions that cover a generated step,
 include a full STEPDEF CREATE or UPDATE block for the matching C# glue file under
