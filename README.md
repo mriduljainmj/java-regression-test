@@ -88,12 +88,19 @@ gate), so a Java-only change doesn't spin up the .NET job and vice versa.
 
 LangGraph state machine:
 
-`collect_diff → gather_context → generate_tests → validate_output → write_features → run_generated_tests → create_pull_request`
+`collect_diff → fetch_ticket_context → gather_context → generate_tests → validate_output → write_features → run_generated_tests → create_pull_request`
 
 - **collect_diff** — `git diff base..head`; **detects the language** (java | dotnet)
-  from the changed files and exits early if no main-source changed. Handles CI edge
-  cases: all-zero `before` SHA (first push), force-pushed/unreachable base (falls
-  back to `head~1`, then the empty tree for single-commit repos).
+  from the changed files and exits early if no main-source changed. Captures the
+  commit messages in range (for work-item auto-detection). Handles CI edge cases:
+  all-zero `before` SHA (first push), force-pushed/unreachable base (falls back to
+  `head~1`, then the empty tree for single-commit repos).
+- **fetch_ticket_context** — pulls **intent** to guide generation: the Azure DevOps
+  work item's description + acceptance criteria + comments (via the ADO REST API),
+  plus any direct reviewer guidance. Work-item ids come from `--work-item` or are
+  auto-detected from the commit messages (`AB#123`). The ticket says what "correct"
+  should be (so the model picks the right boundary values and coverage); reviewer
+  guidance is treated as authoritative. No-ops gracefully when ADO isn't configured.
 - **gather_context** — reads the full component source (changed files first), the
   glue code (found by step annotations/attributes, not file naming), every existing
   `.feature` file, and an OpenAPI spec if present. Skips `target/`, `bin/`, venvs, etc.
@@ -160,6 +167,20 @@ The build/test command, component directory, and glue language are **not** env v
 — they come from the detected `LanguageProfile`. The execution loop is skipped (not
 failed) if the build tool (`mvn` / `dotnet`) isn't on PATH.
 
+**Ticket context (Azure DevOps) — all optional:**
+
+| Variable | Purpose |
+|---|---|
+| `ADO_ORG` | ADO organization — required to fetch work items |
+| `AZURE_DEVOPS_PAT` (or `ADO_PAT`) | Personal access token (Work Items: Read) — required to fetch |
+| `ADO_PROJECT` | Project name/id (optional for get-by-id) |
+| `ADO_BASE_URL` | Override for Azure DevOps Server / on-prem (default `https://dev.azure.com`) |
+
+When unset, the agent runs exactly as before with empty ticket context. The work
+item to fetch is taken from `--work-item` or auto-detected from `AB#123` references
+in the commit messages. Reviewer guidance is supplied via `--reviewer-input` /
+`--reviewer-input-file`, and is also augmented by the work-item's comments.
+
 ### Agent tests
 
 ```bash
@@ -179,6 +200,11 @@ export OPENROUTER_API_KEY=...
 
 # Full run (needs a GitHub remote + gh auth)
 .venv/bin/python main.py --repo .. --base HEAD~1 --head HEAD
+
+# With ticket context + reviewer guidance (ADO_ORG/AZURE_DEVOPS_PAT in env):
+.venv/bin/python main.py --repo .. --base HEAD~1 --head HEAD --no-pr \
+    --work-item 1234 \
+    --reviewer-input "Cover the 100000 boundary exactly; price 100001 must 400."
 ```
 
 ### Run a regression suite locally

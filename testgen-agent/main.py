@@ -31,7 +31,19 @@ def main() -> int:
     parser.add_argument("--head", default="HEAD", help="Head ref/SHA (state after the change)")
     parser.add_argument("--no-pr", action="store_true",
                         help="Write feature files only; skip branch/commit/PR creation")
+    parser.add_argument("--work-item", action="append", default=[], metavar="ID",
+                        help="ADO work-item id for ticket context (repeatable). "
+                             "If omitted, ids are auto-detected from commit messages (AB#123).")
+    parser.add_argument("--reviewer-input", default="",
+                        help="Free-text reviewer guidance fed into generation")
+    parser.add_argument("--reviewer-input-file", default=None,
+                        help="Path to a file whose contents are used as reviewer guidance")
     args = parser.parse_args()
+
+    reviewer_input = args.reviewer_input
+    if args.reviewer_input_file:
+        with open(args.reviewer_input_file, encoding="utf-8") as fh:
+            reviewer_input = (reviewer_input + "\n" + fh.read()).strip()
 
     app = build_graph()
     try:
@@ -41,6 +53,8 @@ def main() -> int:
                 "base_ref": args.base,
                 "head_ref": args.head,
                 "create_pr": not args.no_pr,
+                "work_item_ids": args.work_item,
+                "reviewer_input": reviewer_input,
             }
         )
     except Exception as e:

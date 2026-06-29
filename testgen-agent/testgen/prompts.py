@@ -27,6 +27,16 @@ CRITICAL ANALYSIS STEPS
    assertion incorrect (e.g. the service now transforms a value the scenario
    asserts verbatim), you MUST return that feature file with action UPDATE and
    the assertions corrected to match the new intended behavior.
+5. Use Ticket Intent & Reviewer Guidance: if a TICKET / WORK ITEM or REVIEWER
+   GUIDANCE section is provided, use it to decide WHICH scenarios to write and
+   what the EXPECTED behavior should be (acceptance criteria, edge cases the
+   reviewer flagged). REVIEWER GUIDANCE is authoritative — follow it exactly.
+   The code remains the source of truth for the CURRENT runtime value of an
+   assertion; if the code's behavior CONTRADICTS the ticket's stated intent
+   (e.g. the ticket says "cap at 100000" but the code caps at 99999), do NOT
+   silently bless the code — write the scenario to the code's actual value so
+   tests pass, AND call out the discrepancy explicitly in analysis_summary so a
+   human can decide whether the code or the ticket is wrong.
 
 GHERKIN WRITING GUIDELINES
 - Use descriptive, declarative Gherkin style (not imperative). Avoid technical UI or
@@ -104,6 +114,12 @@ USER_PROMPT_TEMPLATE = """\
 
 4. API SPECIFICATION / SWAGGER (If available):
 {api_spec}
+
+5. TICKET / WORK ITEM (intent, acceptance criteria — the INTENDED behavior):
+{ticket_context}
+
+6. REVIEWER GUIDANCE (explicit human instructions — treat as authoritative):
+{reviewer_input}
 
 Analyze the changes and produce the regression test cases.
 """

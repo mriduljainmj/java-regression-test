@@ -13,6 +13,7 @@ from typing import Optional
 from openai import OpenAI
 from pydantic import ValidationError
 
+from . import ado
 from .gherkin import find_undefined_steps
 from .languages import JAVA, detect_language, extract_step_patterns, profile_for
 from .prompts import (
@@ -131,6 +132,11 @@ def collect_diff(state: TestGenState) -> TestGenState:
     diff = _run(["git", "diff", f"{base}..{head}", "--", "."], cwd=repo)
     changed = _run(["git", "diff", "--name-only", f"{base}..{head}"], cwd=repo)
     changed_files = [line.strip() for line in changed.splitlines() if line.strip()]
+    # Commit messages in range — used to auto-detect ADO work items (AB#123).
+    commit_messages = subprocess.run(
+        ["git", "log", "--format=%B", f"{base}..{head}"],
+        cwd=repo, capture_output=True, text=True,
+    ).stdout
 
     # Detect the language from the changed files, then apply that profile's
     # notion of "main source" to decide whether there's anything to test.
@@ -142,6 +148,7 @@ def collect_diff(state: TestGenState) -> TestGenState:
     ]
     update: TestGenState = {
         "git_diff": diff, "changed_files": changed_files, "language": profile.name,
+        "commit_messages": commit_messages,
     }
     if not src_changes:
         update["skipped_reason"] = (
@@ -149,6 +156,40 @@ def collect_diff(state: TestGenState) -> TestGenState:
             f"{base} and {head}; nothing to generate tests for."
         )
     return update
+
+
+def fetch_ticket_context(state: TestGenState) -> TestGenState:
+    """Pull ADO work-item intent (description + acceptance criteria + comments)
+    and combine with any direct reviewer input. No-ops gracefully when ADO isn't
+    configured — the work-item ids come from --work-item or are auto-detected
+    from the commit messages (AB#123)."""
+    reviewer_input = (state.get("reviewer_input") or "").strip()
+
+    ids = state.get("work_item_ids") or []
+    if not ids:
+        ids = ado.extract_work_item_ids(state.get("commit_messages", ""))
+
+    work_items = []
+    if ids and ado.is_configured():
+        logger.info("Fetching ADO work item(s): %s", ", ".join(ids))
+        work_items = [ado.fetch_work_item(wid) for wid in ids]
+    elif ids and not ado.is_configured():
+        logger.info("Work item(s) referenced (%s) but ADO not configured — skipping fetch",
+                    ", ".join(ids))
+
+    ticket_context = ado.format_ticket_context(work_items)
+
+    # Reviewer comments from the ticket augment any directly-supplied guidance.
+    ticket_comments = ado.collect_reviewer_comments(work_items)
+    if ticket_comments:
+        joined = "\n".join(f"- {c}" for c in ticket_comments)
+        reviewer_input = (reviewer_input + "\n" if reviewer_input else "") + \
+            "From the work-item discussion:\n" + joined
+
+    return {
+        "ticket_context": ticket_context,
+        "reviewer_input": reviewer_input or "Not provided.",
+    }
 
 
 def gather_context(state: TestGenState) -> TestGenState:
@@ -350,6 +391,8 @@ def generate_tests(state: TestGenState) -> TestGenState:
         git_diff=state["git_diff"][:MAX_CONTEXT_CHARS],
         existing_feature_examples=state["existing_feature_examples"],
         api_spec=state["api_spec"],
+        ticket_context=state.get("ticket_context", "Not provided.")[:MAX_CONTEXT_CHARS],
+        reviewer_input=state.get("reviewer_input", "Not provided.")[:MAX_CONTEXT_CHARS],
     )
 
     if state.get("validation_errors"):

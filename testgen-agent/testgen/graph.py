@@ -22,6 +22,7 @@ from .nodes import (
     MAX_TEST_ATTEMPTS,
     collect_diff,
     create_pull_request,
+    fetch_ticket_context,
     gather_context,
     generate_tests,
     run_generated_tests,
@@ -32,7 +33,7 @@ from .state import TestGenState
 
 
 def _after_collect_diff(state: TestGenState) -> str:
-    return END if state.get("skipped_reason") else "gather_context"
+    return END if state.get("skipped_reason") else "fetch_ticket_context"
 
 
 def _after_validate(state: TestGenState) -> str:
@@ -62,6 +63,7 @@ def build_graph():
     graph = StateGraph(TestGenState)
 
     graph.add_node("collect_diff", collect_diff)
+    graph.add_node("fetch_ticket_context", fetch_ticket_context)
     graph.add_node("gather_context", gather_context)
     graph.add_node("generate_tests", generate_tests)
     graph.add_node("validate_output", validate_output)
@@ -71,6 +73,7 @@ def build_graph():
 
     graph.set_entry_point("collect_diff")
     graph.add_conditional_edges("collect_diff", _after_collect_diff)
+    graph.add_edge("fetch_ticket_context", "gather_context")
     graph.add_edge("gather_context", "generate_tests")
     graph.add_edge("generate_tests", "validate_output")
     graph.add_conditional_edges("validate_output", _after_validate)

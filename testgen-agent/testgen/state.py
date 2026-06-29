@@ -51,6 +51,12 @@ class TestGenState(TypedDict, total=False):
     base_ref: str
     head_ref: str
     create_pr: bool
+    work_item_ids: list[str]   # explicit ADO work-item ids (else auto-detected)
+    reviewer_input: str        # free-text human guidance fed into generation
+
+    # ADO-derived context
+    commit_messages: str
+    ticket_context: str
 
     # Detected language profile (java | dotnet)
     language: str

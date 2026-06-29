@@ -14,6 +14,14 @@ on:
         description: "Base ref/SHA to diff against (empty = parent of HEAD)"
         required: false
         default: ""
+      work_item:
+        description: "ADO work-item id for ticket context (empty = auto-detect AB#nnn from commits)"
+        required: false
+        default: ""
+      reviewer_input:
+        description: "Reviewer guidance fed into generation (authoritative)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -54,10 +62,17 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ADO ticket context (all optional — agent skips fetch if unset).
+          # ADO_ORG / ADO_PROJECT as repo variables; PAT as a secret.
+          ADO_ORG: ${{ vars.ADO_ORG }}
+          ADO_PROJECT: ${{ vars.ADO_PROJECT }}
+          AZURE_DEVOPS_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
         run: |
           git config user.name "testgen-agent"
           git config user.email "testgen-agent@users.noreply.github.com"
           python main.py \
             --repo "$GITHUB_WORKSPACE" \
             --base "${{ github.event.inputs.base || github.event.before }}" \
-            --head "${{ github.sha }}"
+            --head "${{ github.sha }}" \
+            ${{ github.event.inputs.work_item && format('--work-item {0}', github.event.inputs.work_item) || '' }} \
+            --reviewer-input "${{ github.event.inputs.reviewer_input }}"
