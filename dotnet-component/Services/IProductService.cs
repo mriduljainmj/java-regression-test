@@ -15,5 +15,6 @@ namespace BP.Services
         bool ValidateBulkOrder(int productId, int quantity);
         (double totalPrice, int discountPercent) CalculateBulkDiscount(int productId, int quantity);
         int GetProductInventoryCount();
+        double ApplyStoreDiscount(int productId, double discountPercent);
     }
 }

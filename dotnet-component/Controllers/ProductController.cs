@@ -202,6 +202,29 @@ namespace BP.Controllers
             });
         }
 
+        [HttpPost("{id}/apply-store-discount")]
+        public ActionResult ApplyStoreDiscount(int id, [FromBody] double discountPercent)
+        {
+            if (discountPercent < 0 || discountPercent > 100)
+                return BadRequest(new { message = "Discount percentage must be between 0 and 100." });
+            
+            var product = _service.GetById(id);
+            if (product == null)
+                return NotFound(new { message = $"Product with ID {id} was not found." });
+            
+            var discountedPrice = _service.ApplyStoreDiscount(id, discountPercent);
+            return Ok(new 
+            { 
+                productId = id, 
+                productName = product.Name, 
+                originalPrice = product.Price, 
+                discountPercent, 
+                discountedPrice, 
+                savings = product.Price - discountedPrice,
+                message = "Store discount applied successfully" 
+            });
+        }
+
         [HttpGet("top-rated")]
         public ActionResult GetTopRated([FromQuery] int count = 5)
         {
