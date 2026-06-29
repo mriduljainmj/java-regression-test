@@ -2,6 +2,7 @@ using BP.Models;
 using BP.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System;
 using System.ComponentModel.DataAnnotations;
 
 namespace BP.Controllers
@@ -97,7 +98,13 @@ namespace BP.Controllers
             // Calculate loyalty discount on the already-discounted price
             double loyaltyDiscount = request.IsLoyaltyMember ? 10 : 0;
             double priceAfterLoyalty = totalPrice * (1 - (loyaltyDiscount / 100.0));
-            double totalSavings = (product.Price * request.Quantity) - priceAfterLoyalty;
+            
+            // Apply seasonal discount if applicable (10% discount in December)
+            int currentMonth = DateTime.Now.Month;
+            double seasonalDiscount = currentMonth == 12 ? 10 : 0;
+            double finalPrice = priceAfterLoyalty * (1 - (seasonalDiscount / 100.0));
+            
+            double totalSavings = (product.Price * request.Quantity) - finalPrice;
 
             return Ok(new
             {
@@ -110,7 +117,9 @@ namespace BP.Controllers
                 priceAfterBulkDiscount = totalPrice,
                 isLoyaltyMember = request.IsLoyaltyMember,
                 loyaltyDiscountPercent = loyaltyDiscount,
-                finalTotal = Math.Round(priceAfterLoyalty, 2),
+                seasonalDiscountPercent = seasonalDiscount,
+                priceAfterSeasonalDiscount = Math.Round(finalPrice, 2),
+                finalTotal = Math.Round(finalPrice, 2),
                 totalSavings = Math.Round(totalSavings, 2),
                 effectiveDiscountPercent = Math.Round(((totalSavings / (product.Price * request.Quantity)) * 100), 2)
             });
