@@ -40,6 +40,8 @@ namespace BP.Controllers
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public ActionResult<Product> Create([FromBody] Product product)
         {
+            if (product == null || string.IsNullOrWhiteSpace(product.Name))
+                return BadRequest(new { message = "Product name is required." });
             if (!ModelState.IsValid) return BadRequest(ModelState);
             var created = _service.Create(product);
             return CreatedAtAction(nameof(GetById), new { id = created.ProductId }, created);
