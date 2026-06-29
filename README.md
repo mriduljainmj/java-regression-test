@@ -243,3 +243,137 @@ The validator guarantees *structure*, not *meaning*:
   types match loosely, so a wrong-format argument reaches the PR check.
 - One component per repo as wired; multiple components would need per-component
   workflow paths and prompts.
+
+## PROJECT.md Auto-Update System
+
+The project maintains a living AI knowledge base (`PROJECT.md`) that stays in sync with code
+changes automatically. This ensures the testgen-agent always has current API definitions,
+business logic details, and edge cases without re-exploring the codebase.
+
+### How It Works
+
+```
+Developer changes code (Java, .NET, or feature file)
+        │
+        ├─ Local: git pre-commit hook runs (optional)
+        │  └─ update-project-mindmap.py detects changes
+        │     └─ PROJECT.md auto-updated + staged
+        │
+        ▼
+Developer pushes to develop/main
+        │
+        ├─ GitHub Actions: auto-update-mindmap.yml triggers
+        │  └─ update-project-mindmap.py runs
+        │     ├─ Scans controllers for API endpoints
+        │     ├─ Scans services for business logic
+        │     ├─ Scans features for test scenarios
+        │     └─ Updates PROJECT.md + auto-commits
+        │
+        ▼
+PROJECT.md is current
+        │
+        ├─ testgen-agent reads PROJECT.md on next run
+        │  └─ Has all current APIs, methods, test patterns
+        │     └─ Generates accurate tests without codebase exploration
+```
+
+### What Gets Updated Automatically
+
+| File Change | Detects | Updates |
+|---|---|---|
+| `*Controller.java` | `@GetMapping`, `@PostMapping`, `@PutMapping`, `@DeleteMapping` | API endpoints in PROJECT.md PART 2 |
+| `*Controller.cs` | `[HttpGet]`, `[HttpPost]`, `[HttpPut]`, `[HttpDelete]` | API endpoints in PROJECT.md PART 2 |
+| `*Service.java` | Public method signatures | Service logic in PROJECT.md PART 3 |
+| `*Service.cs` | Public method signatures | Service logic in PROJECT.md PART 3 |
+| `*.feature` | Scenario names and counts | Test coverage in PROJECT.md PART 5 |
+
+Each auto-update is marked with `[AUTO-UPDATE]` prefix in PROJECT.md so you know which
+sections were machine-generated vs. manually maintained.
+
+### Setup (One-Time)
+
+**Windows:**
+```bash
+setup-hooks.bat
+```
+
+**Mac/Linux:**
+```bash
+./setup-hooks.sh
+```
+
+This configures git to use the `.githooks/` directory and enables the pre-commit hook.
+
+### Example: Add a New Endpoint
+
+1. **Edit Java controller:**
+   ```java
+   @PostMapping("/{id}/apply-loyalty")
+   public void applyLoyalty(@PathVariable Long id) { }
+   ```
+
+2. **Commit:**
+   ```bash
+   git add java-component/src/main/java/com/example/products/ProductController.java
+   git commit -m "feat: add loyalty endpoint"
+   ```
+
+3. **What happens:**
+   - Pre-commit hook runs
+   - `update-project-mindmap.py` detects new endpoint
+   - PROJECT.md updated with:
+     ```
+     [AUTO-UPDATE] Java endpoints detected:
+     - POST /api/v1/products/{id}/apply-loyalty (applyLoyalty)
+     ```
+   - PROJECT.md auto-staged
+
+4. **Push:**
+   ```bash
+   git push origin develop
+   ```
+
+5. **CI verifies:**
+   - `auto-update-mindmap.yml` runs
+   - Double-checks PROJECT.md is current
+   - Auto-commits if any updates needed
+
+6. **Next AI run:**
+   - testgen-agent reads PROJECT.md
+   - Sees new endpoint immediately
+   - Generates loyalty tests
+
+### Configuration Files
+
+| File | Purpose |
+|---|---|
+| `update-project-mindmap.py` | Python script that scans and updates PROJECT.md |
+| `.github/workflows/auto-update-mindmap.yml` | CI/CD workflow (GitHub Actions) |
+| `.githooks/pre-commit` | Local pre-commit hook (optional) |
+| `PROJECT.md` | AI knowledge base (auto-updated) |
+| `AUTO-UPDATE-GUIDE.md` | Complete auto-update documentation |
+
+### Manual Updates
+
+Update PROJECT.md anytime without committing:
+```bash
+python3 update-project-mindmap.py
+```
+
+Auto-commit the changes:
+```bash
+python3 update-project-mindmap.py --auto-commit
+```
+
+### Benefits for testgen-agent
+
+✅ **Accurate API Catalog** — Agent knows every endpoint immediately  
+✅ **Current Business Logic** — Discount tiers, validation rules stay synced  
+✅ **Test Pattern Alignment** — Existing scenarios inform new tests  
+✅ **No Codebase Exploration** — Faster generation, fewer errors  
+✅ **Timestamped** — Audit trail of when knowledge base was updated  
+
+### See Also
+
+- [PROJECT.md](PROJECT.md) — AI knowledge base
+- [AUTO-UPDATE-GUIDE.md](AUTO-UPDATE-GUIDE.md) — Complete auto-update system documentation

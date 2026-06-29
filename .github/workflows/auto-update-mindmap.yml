@@ -1,0 +1,60 @@
+name: Auto-Update PROJECT.md
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - 'java-component/src/main/**/*.java'
+      - 'dotnet-component/**/*.cs'
+      - 'dotnet-component/**/*.csproj'
+      - '**/*.feature'
+      - '!PROJECT.md'
+
+jobs:
+  update-mindmap:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need previous commit for git diff
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      - name: Get changed files
+        id: changed-files
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            FILES=$(git diff --name-only HEAD~1 HEAD)
+          else
+            FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
+          fi
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+      
+      - name: Update PROJECT.md
+        env:
+          CHANGED_FILES: ${{ steps.changed-files.outputs.files }}
+        run: |
+          python3 update-project-mindmap.py --auto-commit
+      
+      - name: Push updates
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Only push if there are staged changes
+          if git diff --cached --quiet; then
+            echo "ℹ️  No changes to PROJECT.md"
+          else
+            git push
+            echo "✅ PROJECT.md updates pushed"
+          fi

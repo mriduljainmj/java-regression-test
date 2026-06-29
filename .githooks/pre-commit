@@ -1,0 +1,40 @@
+#!/bin/bash
+# Pre-commit hook: Auto-update PROJECT.md if code changes detected
+# 
+# Installation:
+#   cp .githooks/pre-commit .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# Or configure git:
+#   git config core.hooksPath .githooks
+
+set -e
+
+# Get the list of staged files
+STAGED_FILES=$(git diff --cached --name-only)
+
+# Check if any code files are staged
+if echo "$STAGED_FILES" | grep -qE '(\.java|\.cs|\.csproj|\.feature)$'; then
+    echo "🔍 Detected code changes, updating PROJECT.md..."
+    
+    # Export changed files for the Python script
+    export CHANGED_FILES="$STAGED_FILES"
+    
+    # Run the update script
+    if python3 update-project-mindmap.py; then
+        # Check if PROJECT.md was modified
+        if git diff --quiet PROJECT.md; then
+            echo "ℹ️  PROJECT.md already up to date"
+        else
+            echo "✅ PROJECT.md updated"
+            echo "📋 Staging PROJECT.md changes..."
+            git add PROJECT.md
+        fi
+    else
+        echo "ℹ️  No updates to PROJECT.md"
+    fi
+else
+    echo "ℹ️  No code changes detected"
+fi
+
+exit 0

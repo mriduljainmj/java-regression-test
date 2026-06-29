@@ -1,0 +1,491 @@
+# 🧠 Project AI Knowledge Base
+
+*Last Updated: 2026-06-29 (Auto-updated on code changes)*
+
+*This file is the AI's memory of the project. When loading this project, read this first to understand architecture, APIs, dependencies, and edge cases.*
+
+**🤖 Auto-Update System Active**: PROJECT.md stays in sync automatically. See [AUTO-UPDATE-GUIDE.md](AUTO-UPDATE-GUIDE.md) for setup and usage.
+
+## Quick Reference
+- **Java API**: `http://localhost:8080/api/v1/` (Spring Boot)
+- **.NET API**: `http://localhost:5000/api/` (ASP.NET Core 9.0)
+- **Test Generator**: LangGraph + OpenRouter LLM (Python)
+- **Status**: Production-ready with dual-mode Java + .NET testing
+
+---
+
+## 📋 PART 1: Project Structure
+
+```
+java-regression-test/
+│
+├─ COMPONENT 1: JAVA (Spring Boot + Maven + Cucumber)
+│  ├─ java-component/pom.xml
+│  ├─ src/main/java/com/example/products/
+│  │  ├─ ProductController.java → API: GET/POST/PUT/DELETE /api/v1/products
+│  │  ├─ OrderController.java → API: GET/POST /api/v1/orders
+│  │  ├─ ProductService.java → Business logic (CRUD, validation)
+│  │  ├─ OrderService.java → Order processing
+│  │  ├─ Product.java → Entity (id, name, price, inStock)
+│  │  ├─ Order.java → Entity (id, productId, quantity)
+│  │  ├─ GlobalExceptionHandler.java → Error handling
+│  │  └─ InvalidPriceRangeException.java → Custom exception
+│  │
+│  └─ src/test/java/com/example/products/cucumber/
+│     ├─ OrderManagementSteps.java
+│     ├─ ProductManagementSteps.java
+│     ├─ ReviewManagementSteps.java
+│     └─ CucumberRunner.java
+│
+├─ COMPONENT 2: .NET (ASP.NET Core 9.0 + SpecFlow)
+│  ├─ dotnet-component/BP.csproj (Main API)
+│  │  ├─ Program.cs → DI: AddSingleton<IProductService>()
+│  │  ├─ Controllers/ProductController.cs → API: GET/POST/PUT/DELETE /api/products
+│  │  ├─ Services/
+│  │  │  ├─ IProductService.cs (interface)
+│  │  │  └─ ProductService.cs (business logic)
+│  │  └─ Models/
+│  │     └─ Product.cs (ProductId, Name, Price, InStock)
+│  │
+│  └─ dotnet-component/BP.Tests.csproj (Test Project)
+│     ├─ StepDefinitions/
+│     │  ├─ ProductRatingStepDefinitions.cs
+│     │  ├─ BulkDiscountStepDefinitions.cs
+│     │  ├─ TopRatedStepDefinitions.cs
+│     │  └─ ProductBulkOrderStepDefinitions.cs
+│     ├─ Features/ (Gherkin files)
+│     └─ WebApplicationFactory integration
+│
+├─ COMPONENT 3: Test Generation Engine (Python)
+│  └─ testgen-agent/
+│     ├─ main.py (CLI entry)
+│     ├─ testgen/graph.py (LangGraph state machine)
+│     ├─ testgen/nodes.py (Execution logic)
+│     ├─ testgen/prompts.py (Java generation prompts)
+│     ├─ testgen/dotnet_prompt.py (.NET generation prompts)
+│     └─ testgen/state.py (TypedDict state definitions)
+│
+└─ CI/CD
+   ├─ .github/workflows/generate-tests.yml
+   └─ .github/workflows/regression.yml
+```
+
+---
+
+## 🔌 PART 2: API Endpoints & Schemas
+
+### JAVA COMPONENT (Spring Boot)
+
+#### **ProductController.java** (`/api/v1/products`)
+
+| Method | Endpoint | Input | Output | Edge Cases |
+|--------|----------|-------|--------|-----------|
+| **GET** | `/api/v1/products` | `minPrice?`, `maxPrice?` | `List<Product>` + `X-Total-Count` header | Price range validation; empty list |
+| **GET** | `/api/v1/products/{id}` | Path: `id` | `Product` | Invalid ID → 404 |
+| **POST** | `/api/v1/products` | `ProductRequest` body | `Product` (201 Created) | Invalid request → 400 |
+| **PUT** | `/api/v1/products/{id}` | Path: `id`, `ProductRequest` body | `Product` | Invalid ID → 404, invalid data → 400 |
+| **DELETE** | `/api/v1/products/{id}` | Path: `id` | 204 No Content | Has orders → throw ProductHasOrdersException |
+
+**ProductRequest Schema** (Java):
+```java
+class ProductRequest {
+    String name;        // required
+    Double price;       // required, > 0
+    Boolean inStock;    // optional
+}
+```
+
+**Dependencies in DELETE**:
+```
+DELETE /api/v1/products/{id}
+  ↓ calls
+orderService.hasOrdersForProduct(id)  // Must check referential integrity!
+  ↓ if true
+throw ProductHasOrdersException(id)   // Constraint violation
+```
+
+---
+
+#### **OrderController.java** (`/api/v1/orders`)
+
+| Method | Endpoint | Input | Output | Edge Cases |
+|--------|----------|-------|--------|-----------|
+| **POST** | `/api/v1/orders` | `OrderRequest` body | `Order` (201 Created) | Invalid product → 404, out of stock → 400 |
+| **GET** | `/api/v1/orders/{id}` | Path: `id` | `Order` | Invalid ID → 404 |
+
+**OrderRequest Schema** (Java):
+```java
+class OrderRequest {
+    Long productId;     // required, must exist
+    int quantity;       // required, 1-1000
+}
+```
+
+**Validation Logic in Service**:
+```java
+public Order create(OrderRequest req) {
+    // 1. Check product exists
+    if (!productService.findById(req.productId)) throw 404
+    
+    // 2. Check product in stock
+    if (!product.inStock) throw 400 "OutOfStock"
+    
+    // 3. Validate quantity
+    if (req.quantity <= 0 || req.quantity > 1000) throw 400 "InvalidQuantity"
+    
+    // 4. Create and return
+    Order o = new Order(req.productId, req.quantity);
+    return repository.save(o);
+}
+```
+
+---
+
+### .NET COMPONENT (ASP.NET Core)
+
+#### **ProductController.cs** (`/api/products`)
+
+| Method | Endpoint | Input | Output | Edge Cases |
+|--------|----------|-------|--------|-----------|
+| **GET** | `/api/products` | none | `List<Product>` | Empty if no products |
+| **GET** | `/api/products/in-stock` | none | `{ total, items[] }` | Excludes out-of-stock |
+| **GET** | `/api/products/in-stock/count` | none | `{ count }` | 0 if all out of stock |
+| **GET** | `/api/products/search/{name}` | Path: `name`, Query: `minPrice?`, `maxPrice?` | `{ count, searchTerm, items[] }` | Empty string → 400, no results → 404 |
+| **GET** | `/api/products/{id}` | Path: `id` | `Product` | Invalid ID → 404 |
+| **POST** | `/api/products` | `Product` body | `Product` (201 Created) | Invalid model → 400 |
+| **PUT** | `/api/products/{id}` | Path: `id`, `Product` body | 204 No Content | Invalid ID → 404, invalid model → 400 |
+| **DELETE** | `/api/products/{id}` | Path: `id` | 204 No Content | Invalid ID → 404 |
+| **POST** | `/api/products/{id}/rate` | Path: `id`, Body: `rating` (int) | `{ productId, productName, rating, message }` | rating < 1 or > 5 → 400, ID not found → 404 |
+| **POST** | `/api/products/{id}/calculate-discount` | Path: `id`, Body: `quantity` (int) | `{ productId, productName, quantity, unitPrice, originalTotal, discountPercent, discountAmount, finalTotal }` | quantity ≤ 0 → 400, ID not found → 404 |
+| **POST** | `/api/products/{id}/validate-bulk-order` | Path: `id`, Body: `quantity` (int) | `{ isValid, productId, quantity, totalPrice, discountPercent }` or 400 | Invalid product, out of stock, qty 1-1000, ≤50 units |
+| **GET** | `/api/products/inventory-summary` | none | `{ totalProducts, inStockCount, outOfStockCount, inventoryPercentage }` | Basic stats |
+| **PATCH** | `/api/products/{id}/stock` | Path: `id`, Body: `inStock` (bool) | `{ message, ProductId, InStock }` | ID not found → 404 |
+| **GET** | `/api/products/top-rated` | Query: `count?` (default 5) | `{ count, products[], message }` | count 1-100, outside → 400 |
+
+**Key Discount Tiers** (Both Java & .NET):
+```
+Quantity >= 50 → 15% discount
+Quantity >= 25 → 10% discount
+Quantity >= 10 → 5% discount
+Quantity < 10  → 0% discount
+Max quantity: 1000
+```
+
+**Product Schema** (.NET):
+```csharp
+class Product {
+    int ProductId;      // auto-assigned
+    string Name;        // required
+    double Price;       // required, > 0
+    bool InStock;       // default true
+}
+```
+
+---
+
+## 🔗 PART 3: API Dependencies & Data Flows
+
+### **Data Model**: Product → Order → Discount
+
+```
+User Action
+    │
+    ├─ Get Product ─────────────────┐
+    │  GET /api/products/{id}       │
+    │  ↓                             │
+    ├─ Validate Bulk Order ◄────────┘
+    │  POST /api/products/{id}/validate-bulk-order
+    │  Body: { quantity: 50 }
+    │  ↓
+    │  • Check product exists ────────┐
+    │  • Check product in stock       │
+    │  • Validate quantity (1-1000)   ├─→ ProductService.ValidateBulkOrder()
+    │  • Calculate discount tier      │
+    │  ↓                              │
+    ├─ Calculate Discount ◄──────────┘
+    │  POST /api/products/{id}/calculate-discount
+    │  Body: { quantity: 50 }
+    │  ↓
+    │  • Fetch product price ────────┐
+    │  • Apply tier discount         ├─→ ProductService.CalculateBulkDiscount()
+    │  • Return: finalTotal = price × qty × (1 - discount%)
+    │  ↓
+    ├─ Place Order
+    │  (Java) POST /api/v1/orders
+    │  Body: { productId, quantity }
+    │  ↓
+    │  • Validate via ProductService.findById()
+    │  • Create Order entity
+    │  • Persist to repository
+    │  ↓ (Success)
+    └─ 201 Created + Order
+```
+
+### **Cross-Component Reference** (Java → .NET Data Compatibility)
+
+| Feature | Java | .NET | Compatibility |
+|---------|------|------|----------------|
+| Product ID | `Long` | `int` | ✅ Cast OK |
+| Product Name | `String` | `string` | ✅ Same |
+| Price | `Double` | `double` | ✅ Same |
+| In Stock | `Boolean` | `bool` | ✅ Same |
+| Discount Tiers | 5%, 10%, 15% | 5%, 10%, 15% | ✅ Identical |
+| Max Bulk Qty | 1000 | 1000 | ✅ Identical |
+| Rating Range | 1-5 | 1-5 | ✅ Identical |
+
+---
+
+## ⚠️ PART 4: Edge Cases & Test Scenarios
+
+### **Critical Path Tests** (Must Pass Always)
+
+#### Java Component
+| Scenario | Input | Expected | Validation |
+|----------|-------|----------|-----------|
+| Create product | `{name: "Widget", price: 9.99}` | 201 Created | Response has ProductId |
+| Get product by ID | `GET /api/v1/products/1` | 200 OK | Product exists |
+| Delete with orders | `DELETE /api/v1/products/1` | 400/Exception | Referential integrity maintained |
+| Rate product | `POST /api/v1/products/1/rate` body: `{rating: 5}` | 200 OK | Rating 1-5 only |
+| Bulk order 50 units | `POST /api/v1/orders` qty: 50 | 201 Created | Gets 15% discount |
+
+#### .NET Component
+| Scenario | Input | Expected | Validation |
+|----------|-------|----------|-----------|
+| Search by name | `GET /api/products/search/Widget?minPrice=5` | 200 OK | Filters applied |
+| Calculate discount | `POST /api/products/1/calculate-discount` qty: 25 | 200 OK + `discountPercent: 10` | Tier correct |
+| Validate bulk order | `POST /api/products/1/validate-bulk-order` qty: 50 | 200 OK + `isValid: true` | Stock + qty validated |
+| Rate product | `POST /api/products/1/rate` rating: 3 | 200 OK | Returns rating |
+| Top rated | `GET /api/products/top-rated?count=10` | 200 OK | count: 10 |
+
+### **Edge Cases by Category**
+
+#### **Boundary Violations**
+```
+Rating Edge Cases:
+  • rating = 0 → 400 "Rating must be between 1 and 5"
+  • rating = 6 → 400 "Rating must be between 1 and 5"
+  • rating = -1 → 400 "Rating must be between 1 and 5"
+  • rating = 3 → 200 OK ✅
+
+Quantity Edge Cases:
+  • qty = 0 → 400 "Quantity must be greater than 0"
+  • qty = 1000 → 200 OK (at limit)
+  • qty = 1001 → 400 "Exceeds bulk order limit"
+  • qty = -5 → 400 "Invalid quantity"
+
+Count Edge Cases (top-rated):
+  • count = 0 → 400 "Count must be between 1 and 100"
+  • count = 101 → 400 "Count must be between 1 and 100"
+  • count = 1 → 200 OK ✅
+  • count = 50 → 200 OK ✅
+```
+
+#### **Data Consistency**
+```
+Product Not Found:
+  • GET /api/products/999 → 404 NotFound
+  • DELETE /api/products/999 → 404 NotFound
+  • POST /api/products/999/rate → 404 NotFound
+
+Cross-Component (Java Order → .NET Validate):
+  • Java: POST /api/v1/orders { productId: 1, qty: 50 }
+  • Validation chain:
+    1. Product exists? (✅ if both components sync)
+    2. Product in stock? (✅ if in-stock flag set)
+    3. Quantity valid? (✅ if 1-1000)
+    4. No duplicate orders? (⚠️ possible race condition)
+```
+
+#### **State Mutations**
+```
+Bulk Order Effects:
+  1. Validation passes
+  2. Order created (201)
+  3. Inventory may decrement (if implemented)
+  4. Discount applied to price
+
+Rating Effects:
+  1. Validation passes (1-5)
+  2. Rating recorded (may affect "top-rated" results)
+  3. Product avg rating updated (if implemented)
+
+Search with Price Filter:
+  1. Search by name (case-insensitive)
+  2. Filter results by minPrice (inclusive)
+  3. Filter results by maxPrice (inclusive)
+  4. Return only matching products
+  5. Return count == actual items
+```
+
+#### **Referential Integrity**
+```
+Java Constraint: Cannot delete product with orders
+  • Product 1 has 5 orders
+  • DELETE /api/v1/products/1 → ProductHasOrdersException
+  • Response: 400 or 409 (depending on exception handler)
+
+.NET Constraint: None implemented (can delete anytime)
+  • DELETE /api/products/1 → 204 NoContent (even with orders)
+```
+
+---
+
+## 🧪 PART 5: Test Generation Strategy
+
+### **When AI Generates Tests**
+
+**Trigger 1**: Java file changes (*.java)
+```
+Flow:
+1. collect_diff() detects src/main/java/ProductController.java changed
+2. project_type = "java"
+3. gather_context() reads Java sources + existing step patterns
+4. generate_tests() uses prompts.py (Java syntax @Given/@When/@Then)
+5. validate_output() enforces Java Cucumber format
+6. run_generated_tests() executes: mvn -f java-component/pom.xml test
+7. Parse Cucumber JSON results
+8. If fail: Feed back to model for correction
+```
+
+**Trigger 2**: .NET file changes (*.cs, *.csproj)
+```
+Flow:
+1. collect_diff() detects Controllers/ProductController.cs changed
+2. project_type = "dotnet"
+3. gather_context() reads C# sources + existing SpecFlow patterns
+4. generate_tests() uses dotnet_prompt.py (C# syntax [Given]/[When]/[Then])
+5. validate_output() enforces C# SpecFlow format (rejects @Given!)
+6. run_generated_tests() executes: dotnet test BP.Tests.csproj --logger trx
+7. Parse TRX XML results
+8. If fail: Feed back to model for correction
+```
+
+### **What to Test Per Component**
+
+#### Java: Gherkin Scenario Template
+```gherkin
+Scenario: Validate bulk order with tiered discount
+  Given I have a product with price 10.00 and quantity 50
+  When I validate the bulk order
+  Then the discount percentage should be 15
+  And the final price should be 425.00
+  And the order status should be valid
+```
+
+#### .NET: SpecFlow Scenario Template
+```gherkin
+Scenario: Calculate discount for bulk purchase
+  Given I have a product "Widget" with price 10.00
+  When I calculate discount for quantity 25
+  Then the discount percent should be 10
+  And the discount amount should be 25.00
+  And the final total should be 225.00
+```
+
+### **Coverage Requirements**
+
+| Component | Critical Paths | Edge Cases | Data Consistency |
+|-----------|-----------------|-----------|-----------------|
+| Java Product | 5+ scenarios | 8+ edge cases | Referential integrity |
+| Java Order | 4+ scenarios | Quantity validation | Cascade checks |
+| .NET Product | 6+ scenarios | Rating (1-5) | Stock status |
+| .NET Discount | 3+ scenarios | Tier thresholds | Price calculations |
+
+---
+
+## 🔧 PART 6: Known Issues & Workarounds
+
+| Issue | Scope | Workaround | Priority |
+|-------|-------|-----------|----------|
+| .NET has no order deletion constraint | .NET | Manual validation in tests | Low |
+| Possible race condition on concurrent orders | Both | Add distributed lock in production | Medium |
+| Rating doesn't update product avg | Both | Cache invalidation needed | Low |
+| Search is case-insensitive | .NET | Document behavior | Low |
+| Max bulk qty (1000) arbitrary | Both | Make configurable in future | Low |
+
+---
+
+## 📝 PART 7: When Code Changes - Update This File
+
+### Update Checklist
+
+**If API endpoint added/modified:**
+- [ ] Add to PART 2 (API Endpoints & Schemas)
+- [ ] Update request/response schemas
+- [ ] Add new edge cases to PART 4
+- [ ] Update test generation strategy in PART 5
+
+**If service logic changed (discount tiers, validation rules):**
+- [ ] Update edge cases in PART 4
+- [ ] Update data flow in PART 3
+- [ ] Verify cross-component compatibility
+
+**If new dependency between services added:**
+- [ ] Add to PART 3 (Dependencies & Data Flows)
+- [ ] Document the call chain
+- [ ] Add edge case for failure scenario
+
+**If test generation logic changes:**
+- [ ] Update testgen-agent description in PART 5
+- [ ] Add new prompts or validation rules
+- [ ] Document new environment variables
+
+---
+
+## 🚀 PART 8: CI/CD Environment
+
+### Environment Variables (GitHub Actions)
+
+```yaml
+# Required for test generation
+OPENROUTER_API_KEY: sk-or-...
+TESTGEN_MODEL: anthropic/claude-3.5-sonnet (or openai/gpt-oss-120b:free)
+
+# Optional overrides
+TESTGEN_MODELS: claude-3.5,gpt-4o,gemma-free  # fallback chain
+TESTGEN_MAX_ATTEMPTS: 3
+TESTGEN_MAX_CONTEXT_CHARS: 60000
+```
+
+### Workflow Triggers
+
+**generate-tests.yml** (Runs testgen-agent):
+- Paths: `java-component/**`, `dotnet-component/**`, `**/*.cs`, `**/*.csproj`
+- Branch: develop
+- On: push
+
+**regression.yml** (Runs both test suites):
+- Trigger: merge to main/develop
+- Jobs:
+  - `mvn -f java-component/pom.xml verify`
+  - `dotnet test dotnet-component/BP.Tests.csproj`
+
+---
+
+## 📊 File Reference
+
+| File | Purpose | Last Updated |
+|------|---------|--------------|
+| `java-component/pom.xml` | Maven build config | *On dependency changes* |
+| `java-component/src/main/java/com/example/products/ProductController.java` | Java API | *On endpoint changes* |
+| `dotnet-component/BP.csproj` | .NET main project | *On dependency changes* |
+| `dotnet-component/Controllers/ProductController.cs` | .NET API | *On endpoint changes* |
+| `dotnet-component/Services/ProductService.cs` | .NET business logic | *On rule changes* |
+| `testgen-agent/testgen/nodes.py` | Test generation pipeline | *On logic changes* |
+| `testgen-agent/testgen/prompts.py` | Java prompt templates | *On Java format changes* |
+| `testgen-agent/testgen/dotnet_prompt.py` | .NET prompt templates | *On C# format changes* |
+| `.github/workflows/generate-tests.yml` | Test generation workflow | *On CI changes* |
+| `.github/workflows/regression.yml` | Regression test workflow | *On CI changes* |
+
+---
+
+## ✅ Quick Start for AI
+
+1. **Read PART 1** - Understand project structure
+2. **Read PART 2** - Learn all APIs (endpoints, schemas, edge cases)
+3. **Read PART 3** - Understand data flows and dependencies
+4. **Read PART 4** - Know what needs testing
+5. **Refer to PART 7** - Update this file when code changes
+6. **Check PART 8** - Know the CI/CD environment
+
+*This knowledge base replaces the need to explore the codebase repeatedly.*

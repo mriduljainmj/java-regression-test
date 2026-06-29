@@ -403,10 +403,12 @@ def generate_tests(state: TestGenState) -> TestGenState:
     rotation = state.get("attempts", 0) % len(MODELS)
     models = MODELS[rotation:] + MODELS[:rotation]
 
+    rate_limit_models = set()  # Track which models hit rate limits
+
     # Outer loop: fall back across models. Inner loop: retry each model with
-    # exponential backoff (5s, 20s) — free-pool 429s usually clear in seconds.
+    # exponential backoff (5s, 20s, 60s) — free-pool 429s usually clear in seconds.
     for model in models:
-        retries_left = 3
+        retries_left = 4  # Increased to 4 for more 429 retries
         while retries_left > 0 and response_text is None:
             try:
                 response = client.chat.completions.create(
@@ -419,25 +421,47 @@ def generate_tests(state: TestGenState) -> TestGenState:
                     raise ValueError("model returned an empty response")
                 response_text = content
                 logger.info("Generated with model %s", model)
+                rate_limit_models.discard(model)  # Clear rate limit if successful
             except Exception as e:
                 last_error = e
                 # Typed status from the SDK; substring checks on str(e) can
                 # false-positive (digits appear in IDs and token counts).
                 status = getattr(e, "status_code", None)
-                logger.warning("[%s] failed (status=%s): %s", model, status, e)
+                if status == 429:
+                    rate_limit_models.add(model)
+                    logger.warning("[%s] RATE LIMIT (429) — all free models may be congested. "
+                                 "Consider setting TESTGEN_MODEL to a paid model or your own key.", model)
+                else:
+                    logger.warning("[%s] failed (status=%s): %s", model, status, e)
+                
                 if status == 402:
                     raise RuntimeError("OpenRouter billing required") from e
                 if status in (400, 404):
                     break  # bad request shape or model removed — next model
+                
                 retries_left -= 1
                 if retries_left > 0:
-                    time.sleep(5 * 4 ** (2 - retries_left))  # 5s, then 20s
+                    # Longer backoff for 429: 5s, 15s, 30s, 60s
+                    sleep_time = [5, 15, 30, 60][4 - retries_left]
+                    logger.info("Retrying in %ds... (retries_left=%d)", sleep_time, retries_left)
+                    time.sleep(sleep_time)
         if response_text is not None:
             break
 
     if response_text is None:
+        rate_limited_msg = ""
+        if rate_limit_models:
+            rate_limited_msg = (f"\n\n⚠️  RATE LIMIT ISSUE: All free models ({', '.join(rate_limit_models)}) "
+                              f"are rate-limited.\n"
+                              f"Solutions:\n"
+                              f"  1. Set your own OpenRouter API key:\n"
+                              f"     export OPENROUTER_API_KEY=sk-or-...\n"
+                              f"  2. Use a paid model:\n"
+                              f"     export TESTGEN_MODEL='anthropic/claude-3.5-sonnet'\n"
+                              f"  3. Get free credits: https://openrouter.ai\n"
+                              f"  4. Wait 30+ minutes and retry (rate limits reset)")
         raise RuntimeError(
-            f"All models exhausted ({', '.join(MODELS)}). Last error: {last_error}"
+            f"All models exhausted ({', '.join(MODELS)}). Last error: {last_error}{rate_limited_msg}"
         )
 
     attempts = state.get("attempts", 0) + 1
