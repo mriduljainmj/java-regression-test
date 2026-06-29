@@ -5,7 +5,6 @@
     <IsTestProject>true</IsTestProject>
     <Nullable>enable</Nullable>
     <RootNamespace>BP.Tests</RootNamespace>
-    <DefaultItemExcludes>$(DefaultItemExcludes);Tests/Features/**/*.feature</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
