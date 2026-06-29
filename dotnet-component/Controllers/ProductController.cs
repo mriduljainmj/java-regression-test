@@ -2,6 +2,7 @@ using BP.Models;
 using BP.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 
 namespace BP.Controllers
 {
@@ -118,7 +119,9 @@ namespace BP.Controllers
 
     public class CalculateOrderTotalRequest
     {
+        [Range(1, int.MaxValue, ErrorMessage = "Quantity must be greater than 0")]
         public int Quantity { get; set; }
+
         public bool IsLoyaltyMember { get; set; }
     }
 }
