@@ -43,11 +43,43 @@ jobs:
             echo "No Java test project found (java-component/pom.xml)"
           fi
           
-          echo "Running .NET regression tests..."
-          if [ -f dotnet-component/BP.Tests.csproj ]; then
-            dotnet test dotnet-component/BP.Tests.csproj --nologo --verbosity minimal --logger trx
+          echo "=========================================="
+          echo "Starting .NET application server..."
+          echo "=========================================="
+          if [ -f dotnet-component/BP.csproj ]; then
+            # Start the app in the background
+            cd dotnet-component
+            dotnet run --no-build > /tmp/app.log 2>&1 &
+            APP_PID=$!
+            echo "App started with PID: $APP_PID"
+            
+            # Wait for app to boot
+            echo "Waiting for app to boot..."
+            sleep 5
+            
+            echo "=========================================="
+            echo "Running .NET regression tests..."
+            echo "=========================================="
+            # Run the tests
+            dotnet test BP.Tests.csproj --nologo --verbosity minimal --logger trx
+            TEST_RESULT=$?
+            
+            # Clean up - stop the app
+            echo "=========================================="
+            echo "Stopping .NET application..."
+            echo "=========================================="
+            kill $APP_PID 2>/dev/null || true
+            wait $APP_PID 2>/dev/null || true
+            
+            cd ..
+            
+            if [ $TEST_RESULT -ne 0 ]; then
+              echo "❌ .NET tests failed"
+              exit $TEST_RESULT
+            fi
+            echo "✓ .NET tests passed"
           else
-            echo "No .NET test project found (dotnet-component/BP.Tests.csproj)"
+            echo "No .NET project found (dotnet-component/BP.csproj)"
           fi
 
       - name: Upload Cucumber report (Java)
