@@ -47,8 +47,9 @@ jobs:
           echo "Starting .NET application server..."
           echo "=========================================="
           if [ -f dotnet-component/BP.csproj ]; then
-            # Start the app in the background
+            # Build the app first, then start it in the background
             cd dotnet-component
+            dotnet build BP.csproj -c Debug --nologo
             dotnet run --no-build > /tmp/app.log 2>&1 &
             APP_PID=$!
             echo "App started with PID: $APP_PID"

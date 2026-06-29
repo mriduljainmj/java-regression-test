@@ -7,11 +7,19 @@
     <RootNamespace>BP.Tests</RootNamespace>
   </PropertyGroup>
 
+  <!-- Exclude main project source files - they are accessed via ProjectReference (BP.dll) -->
+  <ItemGroup>
+    <Compile Remove="Controllers/**/*.cs" />
+    <Compile Remove="Services/**/*.cs" />
+    <Compile Remove="Models/**/*.cs" />
+    <Compile Remove="WeatherForecast.cs" />
+    <Compile Remove="Program.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
-    <PackageReference Include="SpecFlow" Version="3.9.74" />
     <PackageReference Include="SpecFlow.xUnit" Version="3.9.74" />
-    <PackageReference Include="BoDi" Version="1.5.0" />
+    <PackageReference Include="SpecFlow.Tools.MsBuild.Generation" Version="3.9.74" />
     <PackageReference Include="xunit" Version="2.6.6" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6" />
   </ItemGroup>
