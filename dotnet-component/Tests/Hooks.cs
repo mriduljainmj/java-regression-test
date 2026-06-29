@@ -1,3 +1,5 @@
+using System;
+using System.Net.Http;
 using BoDi;
 using TechTalk.SpecFlow;
 
@@ -24,7 +26,6 @@ namespace BP.Tests
             
             // Register HttpClient in the DI container for step definitions
             _objectContainer.RegisterInstanceAs(httpClient);
-            _objectContainer.RegisterInstanceAs(new ScenarioContext());
         }
 
         [AfterScenario]

@@ -225,6 +225,30 @@ namespace BP.Controllers
             });
         }
 
+        [HttpPost("{id}/apply-loyalty-discount")]
+        public ActionResult ApplyLoyaltyDiscount(int id, [FromQuery] bool isLoyaltyMember)
+        {
+            var product = _service.GetById(id);
+            if (product == null)
+                return NotFound(new { message = $"Product with ID {id} was not found." });
+            
+            double loyaltyDiscount = isLoyaltyMember ? 10 : 0;  // 10% for loyalty members
+            double discountedPrice = product.Price * (1 - (loyaltyDiscount / 100.0));
+            double savings = product.Price - discountedPrice;
+            
+            return Ok(new 
+            { 
+                productId = id, 
+                productName = product.Name, 
+                originalPrice = product.Price, 
+                isLoyaltyMember, 
+                loyaltyDiscountPercent = loyaltyDiscount, 
+                discountedPrice, 
+                savings,
+                message = isLoyaltyMember ? "Loyalty discount applied successfully" : "Customer is not a loyalty member" 
+            });
+        }
+
         [HttpGet("top-rated")]
         public ActionResult GetTopRated([FromQuery] int count = 5)
         {
