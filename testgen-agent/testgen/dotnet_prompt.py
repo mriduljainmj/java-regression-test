@@ -47,21 +47,51 @@ STEP MATCHING CONTRACT (CRITICAL)
  - If there are no existing SpecFlow step definitions in the repo, generate full C# glue for every generated step in a STEPDEF CREATE or UPDATE block.
  - If any generated step text is new or does not match an existing binding, you MUST include a matching STEPDEF CREATE or UPDATE block with the full `.cs` file.
 
-C# SPECFLOW SYNTAX (NOT JAVA)
- - **CRITICAL**: Use C# SpecFlow attributes in square brackets: `[Given]`, `[When]`, `[Then]`, `[Before]`, `[After]`
- - **DO NOT** use Java annotations with @ symbols: `@Given`, `@When`, `@Then`
- - Example CORRECT C# syntax:
+C# SPECFLOW SYNTAX (NOT JAVA) - MANDATORY ENFORCEMENT
+===================================================
+
+⚠️ CRITICAL: This is .NET C# code generation, NOT Java. Use ONLY C# SpecFlow attributes.
+
+WRONG (Java - CAUSES BUILD FAILURE):
+```csharp
+@Given("a product exists")                    // ❌ SYNTAX ERROR - @ is Java annotation
+public void givenAProductExists() { }         // ❌ WRONG - camelCase method name
+```
+
+RIGHT (C# - MUST USE THIS):
+```csharp
+[Given("a product exists")]                   // ✅ CORRECT - square brackets [Given]
+public void GivenAProductExists() { }         // ✅ CORRECT - PascalCase method name
+```
+
+ATTRIBUTE RULES (MANDATORY):
+ - Use square brackets: `[Given]`, `[When]`, `[Then]`, `[Before]`, `[After]`
+ - NEVER use @ symbols with attributes
+ - NEVER use Java-style decorators
+ - Method naming: PascalCase (not camelCase)
+ - Example full step definition:
+   ```csharp
+   [When("I submit a bulk order for {int} items")]
+   public void WhenISubmitBulkOrder(int quantity)
+   {
+       ScenarioContext.Current["quantity"] = quantity;
+   }
    ```
-   [Given("a product exists")]
-   public void GivenProductExists() { ... }
-   ```
- - Example INCORRECT Java syntax (DO NOT USE):
-   ```
-   @Given("a product exists")  // ❌ WRONG - This is Java, not C#
-   ```
- - Every step definition method MUST have a `[Given]`, `[When]`, or `[Then]` attribute with the step pattern.
- - Use `ScenarioContext` from TechTalk.SpecFlow for shared state between steps.
- - Use proper C# syntax: namespaces, classes, methods, camelCase for variables.
+
+VALIDATION: If validation error says "@Given/@When/@Then" found, REWRITE the entire file with [Given]/[When]/[Then]
+
+SEARCH-AND-REPLACE GUIDE (IF YOU MADE A MISTAKE):
+If validation returned an error about "Java-style annotations", do this search-and-replace:
+  SEARCH:  @Given(        REPLACE WITH:  [Given(
+  SEARCH:  @When(         REPLACE WITH:  [When(
+  SEARCH:  @Then(         REPLACE WITH:  [Then(
+  SEARCH:  @Before(       REPLACE WITH:  [Before(
+  SEARCH:  @After(        REPLACE WITH:  [After(
+  
+ALSO rename methods from camelCase to PascalCase:
+  SEARCH:  public void givenIHaveA      REPLACE WITH:  public void GivenIHaveA
+  SEARCH:  public void whenISubmit      REPLACE WITH:  public void WhenISubmit
+  SEARCH:  public void thenTheShouldBe  REPLACE WITH:  public void ThenTheShouldBe
 
 SHARED STATE & GLUE PATTERNS
  - Store all shared state in `ScenarioContext` (or an injected test context). Do not use private fields that are inaccessible across classes.
@@ -121,9 +151,12 @@ include a full STEPDEF CREATE or UPDATE block for the matching C# glue file unde
 
 CRITICAL REMINDER: This is a C# / SpecFlow project, NOT Java. Always use C# syntax:
  - Step definitions use [Given], [When], [Then] attributes (NOT @Given, @When, @Then)
- - Example: [Given("a product exists")] public void GivenProductExists() { ... }
- - If you see @Given, @When, @Then in existing code, that's an ERROR—report it as invalid
- - Use proper C# syntax, namespaces, classes, and ScenarioContext
+ - Use square BRACKETS [ ] not @ symbol. @ is Java. [ ] is C#.
+ - Example CORRECT: [Given("a product exists")] public void GivenProductExists() { ... }
+ - Example WRONG: @Given("a product exists") public void givenProductExists() { ... }
+ - Method names: PascalCase (GivenProductExists), NOT camelCase (givenProductExists)
+ - If validation error mentions "@Given/@When/@Then", search-and-replace ALL @ with [ immediately
+ - Using @ in C# files causes COMPILATION FAILURE and will trigger rejection & retry
 """
 
 
@@ -190,12 +223,32 @@ public class TagStepDefinitions {
 
 RETRY_SUFFIX_TEMPLATE = """\
 
-[PREVIOUS ATTEMPT REJECTED]
+[PREVIOUS ATTEMPT REJECTED] — FIX THE ERRORS BELOW
 Your previous output failed validation with the following errors. Fix every one of
 them and produce the corrected result. Do NOT delete scenarios or drop endpoint
 coverage to make the errors go away — rephrase steps to match existing patterns,
 or add the missing glue in a STEPDEF block under `dotnet-component/Tests/`:
+
 {errors}
+
+⚠️ IF YOU SEE "Java-style annotations (@Given, @When, @Then)" IN THE ERROR:
+This is the CRITICAL SYNTAX ERROR for C#. You generated Java code instead of C#.
+FIX IT IMMEDIATELY:
+  1. Replace ALL @Given with [Given
+  2. Replace ALL @When with [When
+  3. Replace ALL @Then with [Then
+  4. Replace ALL method names from camelCase to PascalCase
+  5. Ensure square brackets [ ] surround all step attributes, NOT @ symbols
+  
+Example of what you DID WRONG:
+  @Given("I have a product")
+  public void givenIHaveAProduct() { }
+
+Example of CORRECT C# code:
+  [Given("I have a product")]
+  public void GivenIHaveAProduct() { }
+
+This is your last chance to fix this. If the error mentions @Given/@When/@Then again, generation will FAIL.
 """
 
 

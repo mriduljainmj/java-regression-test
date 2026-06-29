@@ -37,11 +37,31 @@ def _after_collect_diff(state: TestGenState) -> str:
 
 def _after_validate(state: TestGenState) -> str:
     if state["validation_errors"]:
+        # Check for infinite loop: model keeps generating Java @Given/@When/@Then in C# files
+        curr_errors = state["validation_errors"]
+        has_csharp_syntax_error = any(
+            "Java-style annotations" in str(err) or "@(Given|When|Then)" in str(err)
+            for err in curr_errors
+        )
+        
+        if has_csharp_syntax_error and state["attempts"] >= 3:
+            # This error has persisted; model doesn't understand C# syntax
+            raise RuntimeError(
+                f"Generation failed validation after {state['attempts']} attempts: INFINITE LOOP DETECTED\n"
+                f"The model keeps generating Java annotations (@Given/@When/@Then) in C# files.\n"
+                f"This is a fundamental syntax misunderstanding.\n\n"
+                f"Errors: {'; '.join(curr_errors)}\n\n"
+                f"C# SpecFlow MUST use square brackets [Given], [When], [Then], NOT @ symbols.\n"
+                f"Example CORRECT syntax:\n"
+                f"  [Given(\"I have a product\")]\n"
+                f"  public void GivenIHaveAProduct() {{ }}\n"
+            )
+        
         if state["attempts"] < MAX_ATTEMPTS:
             return "generate_tests"
         raise RuntimeError(
             f"Generation failed validation after {MAX_ATTEMPTS} attempts: "
-            + "; ".join(state["validation_errors"])
+            + "; ".join(curr_errors)
         )
     if not state["generation"].new_or_modified_features:
         return END  # purely internal change — nothing to write

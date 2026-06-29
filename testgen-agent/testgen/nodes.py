@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 
 # Safety cap on total model calls (structural retries + rotation). Set high
 # enough that the execution-feedback rounds below never trip it.
-MAX_ATTEMPTS = int(os.environ.get("TESTGEN_MAX_ATTEMPTS", "6"))
+# Increased to 12 for C# syntax correction retries (6 is insufficient for @Given → [Given] fixes)
+MAX_ATTEMPTS = int(os.environ.get("TESTGEN_MAX_ATTEMPTS", "12"))
 
 # Execution-feedback loop: run the generated tests and feed failures back to the
 # model, at most this many times (the user-facing "max 3 retries").
@@ -532,10 +533,30 @@ def validate_output(state: TestGenState) -> TestGenState:
         
         # For C# files, check for Java-style annotations (@Given, @When, @Then)
         if name.endswith(".cs"):
-            if re.search(r'@(Given|When|Then|Before|After)\s*\(', glue.content):
+            java_matches = list(re.finditer(r'@(Given|When|Then|Before|After)\s*\([^)]*\)', glue.content))
+            if java_matches:
+                # Extract context around each match for clarity
+                error_lines = []
+                for match in java_matches[:3]:  # Show first 3 errors
+                    start = max(0, match.start() - 50)
+                    end = min(len(glue.content), match.end() + 50)
+                    context = glue.content[start:end].replace('\n', ' ')
+                    wrong = match.group(0)
+                    right = f"[{match.group(1)}(...)]"
+                    error_lines.append(f"  WRONG: {wrong}")
+                    error_lines.append(f"  RIGHT: {right}")
+                
                 errors.append(
-                    f"{name}: contains Java-style annotations (@Given, @When, @Then). "
-                    "Use C# SpecFlow syntax instead: [Given], [When], [Then], e.g., [Given(\"I have a product\")]"
+                    f"\n❌ {name}: CRITICAL - C# SpecFlow file MUST use [Given], [When], [Then] NOT @Given, @When, @Then\n"
+                    + "\n".join(error_lines) + "\n"
+                    f"SYNTAX RULES FOR C# SPECFLOW:\n"
+                    f"  ✓ [Given(\"step text\")] — square brackets, NOT @ symbol\n"
+                    f"  ✓ [When(\"step text\")]  — lowercase w after bracket\n"
+                    f"  ✓ [Then(\"step text\")] — step text in quotes\n"
+                    f"  ✓ public void MethodName() {{ }} — PascalCase method names\n"
+                    f"  ✗ @Given, @When, @Then — Java syntax, CAUSES BUILD FAILURE\n"
+                    f"  ✗ camelCase method names — use PascalCase\n"
+                    f"\nREWRITE the entire C# file: replace ALL @Given with [Given], ALL @When with [When], ALL @Then with [Then]."
                 )
         if target.is_file():
             removed = [
