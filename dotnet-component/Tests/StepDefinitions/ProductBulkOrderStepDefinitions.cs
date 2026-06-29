@@ -1,89 +1,182 @@
-package com.example.cucumber;
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
+using BP.Models;
+using TechTalk.SpecFlow;
 
-import io.cucumber.java.en.And;
-import io.cucumber.java.en.Given;
-import io.cucumber.java.en.Then;
-import io.cucumber.java.en.When;
-import io.restassured.RestAssured;
-import io.restassured.http.ContentType;
-import io.restassured.response.Response;
-import org.springframework.beans.factory.annotation.Autowired;
+namespace BP.Tests.StepDefinitions
+{
+    [Binding]
+    public class ProductBulkOrderStepDefinitions
+    {
+        private readonly ScenarioContext _scenarioContext;
+        private readonly HttpClient _httpClient;
 
-import java.util.HashMap;
-import java.util.Map;
+        public ProductBulkOrderStepDefinitions(ScenarioContext scenarioContext, HttpClient httpClient)
+        {
+            _scenarioContext = scenarioContext;
+            _httpClient = httpClient;
+        }
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
+        [Given("a product exists with name {string} and price {double} and in stock")]
+        public async Task GivenAProductExistsWithNameAndPrice(string name, double price)
+        {
+            var payload = new { name, price, inStock = true };
+            var json = JsonSerializer.Serialize(payload);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-public class ProductBulkOrderStepDefinitions {
+            var response = await _httpClient.PostAsync("/api/products", content);
+            if (response.StatusCode == HttpStatusCode.Created)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var jsonDoc = JsonDocument.Parse(responseContent);
+                var productId = jsonDoc.RootElement.GetProperty("productId").GetInt32();
+                _scenarioContext["productId"] = productId;
+                _scenarioContext["productName"] = name;
+                _scenarioContext["productPrice"] = price;
+            }
+        }
 
-    @Autowired
-    private TestContext context;
+        [When("I validate a bulk order of {int} items")]
+        public async Task WhenIValidateABulkOrderOfItems(int quantity)
+        {
+            var productId = _scenarioContext["productId"];
+            var payload = new { quantity };
+            var json = JsonSerializer.Serialize(payload);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-    @Given("a product exists with name {string} and price {double} and in stock")
-    public void aProductExistsWithNameAndPriceAndInStock(String name, double price) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("Name", name);
-        body.put("Price", price);
-        body.put("InStock", true);
-        Response response = RestAssured.given()
-                .contentType(ContentType.JSON)
-                .body(body)
-                .post("/api/products");
-        response.then().statusCode(201);
-        context.setLastCreatedId("product", response.jsonPath().getLong("id"));
-    }
+            var response = await _httpClient.PostAsync($"/api/products/{productId}/validate-bulk-order", content);
+            _scenarioContext["bulkOrderResponse"] = response;
+            _scenarioContext["statusCode"] = response.StatusCode;
 
-    @When("a client validates bulk order for the last created product with quantity {int}")
-    public void validateBulkOrderForLastCreatedProduct(int quantity) {
-        Long productId = context.getLastCreatedId("product");
-        Response response = RestAssured.given()
-                .contentType(ContentType.JSON)
-                .body(quantity)
-                .post("/api/products/" + productId + "/validate-bulk-order");
-        context.setLastResponse(response);
-    }
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var jsonDoc = JsonDocument.Parse(responseContent);
+                _scenarioContext["bulkOrderData"] = jsonDoc;
+            }
+        }
 
-    @When("a client validates bulk order for product id {int} with quantity {int}")
-    public void validateBulkOrderForProductId(int productId, int quantity) {
-        Response response = RestAssured.given()
-                .contentType(ContentType.JSON)
-                .body(quantity)
-                .post("/api/products/" + productId + "/validate-bulk-order");
-        context.setLastResponse(response);
-    }
+        [When("a client validates bulk order for the last created product with quantity {int}")]
+        public async Task WhenValidateBulkOrderForLastCreatedProductWithQuantity(int quantity)
+        {
+            var productId = _scenarioContext["productId"];
+            var payload = new { quantity };
+            var json = JsonSerializer.Serialize(payload);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-    @When("a client requests inventory summary")
-    public void requestInventorySummary() {
-        Response response = RestAssured.given()
-                .get("/api/products/inventory-summary");
-        context.setLastResponse(response);
-    }
+            var response = await _httpClient.PostAsync($"/api/products/{productId}/validate-bulk-order", content);
+            _scenarioContext["bulkOrderResponse"] = response;
+            _scenarioContext["statusCode"] = response.StatusCode;
 
-    @Then("the response JSON should contain {string} with value {string}")
-    public void responseJsonShouldContainStringValue(String field, String expected) {
-        assertThat(context.getLastResponse().jsonPath().getString(field), equalTo(expected));
-    }
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var jsonDoc = JsonDocument.Parse(responseContent);
+                _scenarioContext["bulkOrderData"] = jsonDoc;
+            }
+        }
 
-    @Then("the response JSON should contain {string} with value {int}")
-    public void responseJsonShouldContainIntValue(String field, int expected) {
-        assertThat(context.getLastResponse().jsonPath().getInt(field), equalTo(expected));
-    }
+        [When("a client validates bulk order for product id {int} with quantity {int}")]
+        public async Task WhenValidateBulkOrderForProductIdWithQuantity(int productId, int quantity)
+        {
+            var payload = new { quantity };
+            var json = JsonSerializer.Serialize(payload);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-    @Then("the response JSON should contain {string} with value {double}")
-    public void responseJsonShouldContainDoubleValue(String field, double expected) {
-        assertThat(context.getLastResponse().jsonPath().getDouble(field), closeTo(expected, 0.001));
-    }
+            var response = await _httpClient.PostAsync($"/api/products/{productId}/validate-bulk-order", content);
+            _scenarioContext["bulkOrderResponse"] = response;
+            _scenarioContext["statusCode"] = response.StatusCode;
 
-    @Then("the response JSON should contain {string} with value true")
-    public void responseJsonShouldContainTrue(String field) {
-        assertThat(context.getLastResponse().jsonPath().getBoolean(field), is(true));
-    }
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var jsonDoc = JsonDocument.Parse(responseContent);
+                _scenarioContext["bulkOrderData"] = jsonDoc;
+            }
+        }
 
-    @And("the response JSON should contain {string} with value <captured>")
-    public void responseJsonShouldContainCaptured(String field) {
-        // The placeholder <captured> refers to the last created product id.
-        Long expected = context.getLastCreatedId("product");
-        assertThat(context.getLastResponse().jsonPath().getLong(field), equalTo(expected));
+        [When("a client requests inventory summary")]
+        public async Task WhenRequestInventorySummary()
+        {
+            var response = await _httpClient.GetAsync("/api/products/inventory-summary");
+            _scenarioContext["inventoryResponse"] = response;
+            _scenarioContext["statusCode"] = response.StatusCode;
+
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var jsonDoc = JsonDocument.Parse(responseContent);
+                _scenarioContext["inventorySummaryData"] = jsonDoc;
+            }
+        }
+
+        [Then("the bulk order should be valid")]
+        public void ThenTheBulkOrderShouldBeValid()
+        {
+            var statusCode = (HttpStatusCode)_scenarioContext["statusCode"];
+            if (statusCode != HttpStatusCode.OK)
+            {
+                throw new InvalidOperationException($"Expected OK, got {statusCode}");
+            }
+        }
+
+        [Then("the bulk order should be invalid")]
+        public void ThenTheBulkOrderShouldBeInvalid()
+        {
+            var statusCode = (HttpStatusCode)_scenarioContext["statusCode"];
+            if (statusCode == HttpStatusCode.OK)
+            {
+                throw new InvalidOperationException("Expected validation to fail, but it succeeded");
+            }
+        }
+
+        [Then("the response JSON should contain {string} with value {string}")]
+        public void ThenResponseJsonShouldContainStringValue(string field, string expectedValue)
+        {
+            var data = (JsonDocument)_scenarioContext["bulkOrderData"];
+            var actualValue = data.RootElement.GetProperty(field).GetString();
+            if (actualValue != expectedValue)
+            {
+                throw new InvalidOperationException($"Expected {field}={expectedValue}, got {actualValue}");
+            }
+        }
+
+        [Then("the response JSON should contain {string} with value {int}")]
+        public void ThenResponseJsonShouldContainIntValue(string field, int expectedValue)
+        {
+            var data = (JsonDocument)_scenarioContext["bulkOrderData"];
+            var actualValue = data.RootElement.GetProperty(field).GetInt32();
+            if (actualValue != expectedValue)
+            {
+                throw new InvalidOperationException($"Expected {field}={expectedValue}, got {actualValue}");
+            }
+        }
+
+        [Then("the response JSON should contain {string} with value {double}")]
+        public void ThenResponseJsonShouldContainDoubleValue(string field, double expectedValue)
+        {
+            var data = (JsonDocument)_scenarioContext["bulkOrderData"];
+            var actualValue = data.RootElement.GetProperty(field).GetDouble();
+            if (Math.Abs(actualValue - expectedValue) > 0.001)
+            {
+                throw new InvalidOperationException($"Expected {field}={expectedValue}, got {actualValue}");
+            }
+        }
+
+        [Then("the response JSON should contain {string} with value true")]
+        public void ThenResponseJsonShouldContainTrue(string field)
+        {
+            var data = (JsonDocument)_scenarioContext["bulkOrderData"];
+            var actualValue = data.RootElement.GetProperty(field).GetBoolean();
+            if (!actualValue)
+            {
+                throw new InvalidOperationException($"Expected {field}=true, got false");
+            }
+        }
     }
 }

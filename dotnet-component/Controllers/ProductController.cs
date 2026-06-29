@@ -1,8 +1,10 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using BP.Models;
 using BP.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using System.Linq;
 
 namespace BP.Controllers
 {
@@ -12,11 +14,9 @@ namespace BP.Controllers
     {
         private readonly IProductService _service;
 
-        public ProductController()
+        public ProductController(IProductService service)
         {
-            // For simplicity in this example we instantiate the service directly.
-            // In a real app register IProductService in DI and request it in ctor.
-            _service = new ProductService();
+            _service = service;
         }
 
         [HttpGet]

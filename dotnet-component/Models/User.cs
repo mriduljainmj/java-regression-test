@@ -1,3 +1,5 @@
+using System;
+
 namespace BP.Models
 {
     public class User

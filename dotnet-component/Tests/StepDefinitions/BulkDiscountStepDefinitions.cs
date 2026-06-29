@@ -127,14 +127,5 @@ namespace BP.Tests.StepDefinitions
             if (quantity >= 10 && quantity < 25 && discountPercent != 5)
                 throw new InvalidOperationException($"Expected 5% for 10-24 items, got {discountPercent}%");
         }
-
-        [Scenario]
-        public void DiscountTierValidation()
-        {
-            // Discount tiers:
-            // 10-24 items: 5%
-            // 25-49 items: 10%
-            // 50+ items: 15%
-        }
     }
 }

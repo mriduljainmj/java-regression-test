@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Safety cap on total model calls (structural retries + rotation). Set high
 # enough that the execution-feedback rounds below never trip it.
 # Increased to 12 for C# syntax correction retries (6 is insufficient for @Given → [Given] fixes)
-MAX_ATTEMPTS = int(os.environ.get("TESTGEN_MAX_ATTEMPTS", "12"))
+MAX_ATTEMPTS = int(os.environ.get("TESTGEN_MAX_ATTEMPTS", "6"))
 
 # Execution-feedback loop: run the generated tests and feed failures back to the
 # model, at most this many times (the user-facing "max 3 retries").
@@ -708,35 +708,93 @@ def _extract_scenario_failures(repo: Path) -> list:
     return failures
 
 
-def run_generated_tests(state: TestGenState) -> TestGenState:
-    """Run `mvn test` on the written tests; on failure, capture *why* (compile
-    errors and per-scenario failures) so the model can correct itself.
+def _extract_dotnet_compile_errors(build_output: str) -> list:
+    """Pull C# compiler errors out of dotnet build output."""
+    errors = []
+    for line in build_output.splitlines():
+        # e.g. "path/File.cs(12,34): error CS0246: ..."
+        if ".cs(" in line and ("error" in line.lower() or "warning" in line.lower()):
+            errors.append(line.strip())
+    return errors[:25]
 
-    Skips gracefully (tests_passed=True) when there's nothing to run or Maven
-    isn't available, so the agent still works in a Maven-less environment — just
-    without execution feedback."""
-    repo = Path(state["repo_path"]).resolve()  # absolute, so mvn -f and cwd agree
+
+def _extract_dotnet_test_failures(repo: Path) -> list:
+    """Parse .NET TRX XML report for failed test results."""
+    # Find the most recent TRX file
+    test_results_dir = repo / "dotnet-component" / "TestResults"
+    if not test_results_dir.exists():
+        return []
+    
+    trx_files = sorted(test_results_dir.glob("**/*.trx"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not trx_files:
+        return []
+    
+    try:
+        import xml.etree.ElementTree as ET
+        tree = ET.parse(str(trx_files[0]))
+        root = tree.getroot()
+        
+        failures = []
+        # TRX namespace
+        ns = {'trx': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+        
+        for result in root.findall('.//trx:UnitTestResult', ns):
+            outcome = result.get('outcome', '')
+            if outcome not in ('Failed', 'Error'):
+                continue
+            
+            test_name = result.get('testName', 'Unknown')
+            error_info = result.find('trx:Output/trx:ErrorInfo/trx:Message', ns)
+            error_msg = error_info.text.strip() if error_info is not None and error_info.text else 'No details'
+            
+            failures.append(f"- {test_name}: {error_msg[:100]}")
+        
+        return failures[:25]
+    except Exception as e:
+        logger.warning("Failed to parse TRX file: %s", e)
+        return []
+
+
+def run_generated_tests(state: TestGenState) -> TestGenState:
+    """Run tests for generated code; on failure, capture compile errors and test
+    failures so the model can correct itself.
+
+    For Java: runs `mvn test` on the java-component.
+    For .NET: runs `dotnet test` on the BP.Tests.csproj project.
+    
+    Skips gracefully when tools aren't available or there's nothing to run."""
+    repo = Path(state["repo_path"]).resolve()
 
     if not state.get("written_files"):
         return {"tests_passed": True, "test_failures": [],
                 "test_report": "no files written; nothing to run"}
 
+    project_type = state.get("project_type", "java")
+    
+    if project_type == "java":
+        return _run_java_tests(repo, state)
+    else:  # dotnet
+        return _run_dotnet_tests(repo, state)
+
+
+def _run_java_tests(repo: Path, state: TestGenState) -> TestGenState:
+    """Execute Java tests via Maven."""
     if shutil.which(MVN) is None:
         logger.warning("'%s' not found on PATH — skipping test execution", MVN)
         return {"tests_passed": True, "test_failures": [],
                 "test_report": "test execution skipped (Maven not available in this environment)"}
 
     pom = str(repo / COMPONENT_DIR / "pom.xml")
-    logger.info("Running generated tests: %s -B -f %s test", MVN, pom)
+    logger.info("Running Java tests: %s -B -f %s test", MVN, pom)
     proc = subprocess.run(
         [MVN, "-B", "-f", pom, "test"],
         cwd=str(repo), capture_output=True, text=True, timeout=TEST_TIMEOUT,
     )
 
     if proc.returncode == 0:
-        logger.info("Generated tests passed.")
+        logger.info("Java tests passed.")
         return {"tests_passed": True, "test_failures": [],
-                "test_report": "all generated tests passed"}
+                "test_report": "all Java tests passed"}
 
     test_attempts = state.get("test_attempts", 0) + 1
     output = proc.stdout + "\n" + proc.stderr
@@ -752,11 +810,10 @@ def run_generated_tests(state: TestGenState) -> TestGenState:
         feedback.append("SCENARIO FAILURES:")
         feedback += scenario_failures
     if not feedback:
-        # mvn failed for some other reason — hand back the tail so it's not opaque.
         tail = "\n".join(output.splitlines()[-25:])
         feedback.append("`mvn test` failed; tail of the output:\n" + tail)
 
-    logger.warning("Test attempt %d failed (%d compile, %d scenario)",
+    logger.warning("Java test attempt %d failed (%d compile, %d scenario)",
                    test_attempts, len(compile_errors), len(scenario_failures))
     return {
         "tests_passed": False,
@@ -764,9 +821,57 @@ def run_generated_tests(state: TestGenState) -> TestGenState:
         "test_failures": feedback,
         "test_report": f"{len(scenario_failures)} scenario failure(s), "
                        f"{len(compile_errors)} compile error(s) on attempt {test_attempts}",
-        # Clear structural errors so the next generate uses the test feedback.
         "validation_errors": [],
     }
+
+
+def _run_dotnet_tests(repo: Path, state: TestGenState) -> TestGenState:
+    """Execute .NET tests via dotnet test."""
+    if shutil.which("dotnet") is None:
+        logger.warning("'dotnet' not found on PATH — skipping test execution")
+        return {"tests_passed": True, "test_failures": [],
+                "test_report": "test execution skipped (dotnet CLI not available in this environment)"}
+
+    project_file = str(repo / "dotnet-component" / "BP.Tests.csproj")
+    logger.info("Running .NET tests: dotnet test %s", project_file)
+    proc = subprocess.run(
+        ["dotnet", "test", project_file, "--nologo", "--verbosity", "minimal", "--logger", "trx"],
+        cwd=str(repo), capture_output=True, text=True, timeout=TEST_TIMEOUT,
+    )
+
+    if proc.returncode == 0:
+        logger.info(".NET tests passed.")
+        return {"tests_passed": True, "test_failures": [],
+                "test_report": "all .NET tests passed"}
+
+    test_attempts = state.get("test_attempts", 0) + 1
+    output = proc.stdout + "\n" + proc.stderr
+
+    compile_errors = _extract_dotnet_compile_errors(output)
+    test_failures = _extract_dotnet_test_failures(repo)
+
+    feedback: list = []
+    if compile_errors:
+        feedback.append("COMPILATION/BUILD ERROR (the generated C# does not compile):")
+        feedback += [f"- {e}" for e in compile_errors]
+    if test_failures:
+        feedback.append("TEST FAILURES:")
+        feedback += test_failures
+    if not feedback:
+        tail = "\n".join(output.splitlines()[-25:])
+        feedback.append("`dotnet test` failed; tail of the output:\n" + tail)
+
+    logger.warning(".NET test attempt %d failed (%d compile, %d failures)",
+                   test_attempts, len(compile_errors), len(test_failures))
+    return {
+        "tests_passed": False,
+        "test_attempts": test_attempts,
+        "test_failures": feedback,
+        "test_report": f"{len(test_failures)} test failure(s), "
+                       f"{len(compile_errors)} compile error(s) on attempt {test_attempts}",
+        "validation_errors": [],
+    }
+
 
 
 def create_pull_request(state: TestGenState) -> TestGenState:

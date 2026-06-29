@@ -2,6 +2,13 @@
 target/
 *.class
 
+# .NET / SpecFlow
+bin/
+obj/
+*.csproj.user
+*.feature.cs
+*.feature.feature.cs
+
 # Python
 __pycache__/
 *.py[cod]

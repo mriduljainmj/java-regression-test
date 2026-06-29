@@ -16,7 +16,15 @@ namespace BP.Tests
         [BeforeScenario]
         public void BeforeScenario()
         {
-            // Setup before each scenario
+            // Create HttpClient for testing
+            var httpClient = new HttpClient
+            {
+                BaseAddress = new Uri("http://localhost:5000")
+            };
+            
+            // Register HttpClient in the DI container for step definitions
+            _objectContainer.RegisterInstanceAs(httpClient);
+            _objectContainer.RegisterInstanceAs(new ScenarioContext());
         }
 
         [AfterScenario]
