@@ -15,7 +15,13 @@ from pydantic import ValidationError
 
 from . import ado
 from .gherkin import find_undefined_steps
-from .languages import JAVA, detect_language, extract_step_patterns, profile_for
+from .languages import (
+    JAVA,
+    detect_language,
+    discover_component_root,
+    extract_step_patterns,
+    profile_for,
+)
 from .prompts import (
     LANGUAGE_CONTEXT_TEMPLATE,
     OUTPUT_FORMAT_INSTRUCTIONS,
@@ -146,9 +152,15 @@ def collect_diff(state: TestGenState) -> TestGenState:
         f for f in changed_files
         if profile.source_marker in f and f.endswith(profile.source_ext)
     ]
+    # Find the component's build root for this repo's actual layout (so the agent
+    # works on any repo, not just the bundled samples). Env override wins.
+    component_root = os.environ.get("TESTGEN_COMPONENT_DIR") \
+        or discover_component_root(repo, profile, changed_files)
+    logger.info("Component root: %s", component_root)
+
     update: TestGenState = {
         "git_diff": diff, "changed_files": changed_files, "language": profile.name,
-        "commit_messages": commit_messages,
+        "commit_messages": commit_messages, "component_root": component_root,
     }
     if not src_changes:
         update["skipped_reason"] = (
@@ -635,9 +647,9 @@ def _extract_compile_errors(output: str, profile) -> list:
     return list(dict.fromkeys(errors))[:25]
 
 
-def _extract_scenario_failures_java(repo: Path, profile) -> list:
+def _extract_scenario_failures_java(repo: Path, profile, component_root: str) -> list:
     """Parse the Cucumber JSON report for failed scenarios + the reason."""
-    report_path = repo / profile.component_dir / profile.report_rel
+    report_path = repo / component_root / profile.report_rel
     if not report_path.is_file():
         return []
     try:
@@ -704,12 +716,13 @@ def run_generated_tests(state: TestGenState) -> TestGenState:
     — just without execution feedback."""
     repo = Path(state["repo_path"]).resolve()  # absolute, so paths and cwd agree
     profile = _profile(state)
+    component_root = state.get("component_root") or profile.component_dir
 
     if not state.get("written_files"):
         return {"tests_passed": True, "test_failures": [],
                 "test_report": "no files written; nothing to run"}
 
-    component = repo / profile.component_dir
+    component = repo / component_root
     # Fill the command template: {pom} for Java, {dir} for .NET.
     pom = str(component / "pom.xml")
     cmd = [arg.format(pom=pom, dir=str(component)) for arg in profile.test_cmd]
@@ -734,7 +747,7 @@ def run_generated_tests(state: TestGenState) -> TestGenState:
 
     compile_errors = _extract_compile_errors(output, profile)
     if profile.report_rel:
-        scenario_failures = _extract_scenario_failures_java(repo, profile)
+        scenario_failures = _extract_scenario_failures_java(repo, profile, component_root)
     else:
         scenario_failures = _extract_scenario_failures_dotnet(output)
 

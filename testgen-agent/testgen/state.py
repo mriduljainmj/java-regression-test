@@ -58,8 +58,9 @@ class TestGenState(TypedDict, total=False):
     commit_messages: str
     ticket_context: str
 
-    # Detected language profile (java | dotnet)
+    # Detected language profile (java | dotnet) and the discovered component root
     language: str
+    component_root: str  # path (relative to repo) of the build root; "." = repo root
 
     # Gathered context
     git_diff: str

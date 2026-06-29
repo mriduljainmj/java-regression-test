@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "testgen-agent"
+version = "0.1.0"
+description = "LLM agent that generates Cucumber/Reqnroll regression tests from a git diff (Java + .NET)"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=2.41.0",
+    "langgraph>=0.2.60",
+    "pydantic>=2.7",
+]
+
+[project.scripts]
+testgen = "testgen.cli:main"
+
+[tool.setuptools]
+packages = ["testgen"]

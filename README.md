@@ -218,6 +218,39 @@ The Java suite needs JDK 17+ — if `mvn` picks up an older Java, point `JAVA_HO
 at 17 (e.g. via `~/.mavenrc`). The `dotnet-component` sample is provided as a
 detection target and still needs a `dotnet test` run to verify (see its README).
 
+## Using the agent in another repo (no folder copying)
+
+The agent is a standalone, **repo-agnostic** tool — it detects the language and
+discovers the build root (the directory with the `pom.xml` / `.sln`) from the
+changed files, so it isn't tied to this repo's `java-component/` layout. Two ways
+to consume it from a separate component repo:
+
+**1. pip-installable CLI** (works locally and on any CI):
+
+```bash
+pip install "git+https://github.com/<you>/<this-repo>.git#subdirectory=testgen-agent"
+cd /path/to/your/component/repo
+export OPENROUTER_API_KEY=...
+testgen --repo . --base origin/main --head HEAD --no-pr
+```
+
+**2. Reusable GitHub Action** (one step in the component repo's workflow):
+
+```yaml
+- uses: <you>/<this-repo>/.github/actions/testgen@main
+  with:
+    base: ${{ github.event.before }}
+    head: ${{ github.sha }}
+    openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+A complete consumer workflow to drop into another repo is in
+[`docs/example-consumer-workflow.yml`](docs/example-consumer-workflow.yml). The
+Action pip-installs the agent and sets up both toolchains; nothing from
+`testgen-agent/` is copied into the consuming repo. If your layout is unusual,
+override the discovered root with `TESTGEN_COMPONENT_DIR`.
+
 ## Setup for CI
 
 1. Push this repo to GitHub.

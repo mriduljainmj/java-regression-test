@@ -1,0 +1,32 @@
+# testgen-agent
+
+An LLM agent that generates Cucumber (Java) / Reqnroll-SpecFlow (.NET) regression
+tests from a git diff, runs them, and self-corrects from the failures. Detects the
+component's language and build layout automatically, so it works on any repo
+without per-project wiring.
+
+## Install
+
+```bash
+pip install testgen-agent           # once published
+# or straight from git:
+pip install "git+https://github.com/<you>/<agent-repo>.git#subdirectory=testgen-agent"
+```
+
+## Use against any repo
+
+```bash
+cd /path/to/your/component/repo      # a Java (Maven) or .NET (Reqnroll) repo
+export OPENROUTER_API_KEY=...
+testgen --repo . --base origin/main --head HEAD --no-pr
+```
+
+`--no-pr` writes the generated `.feature` + step-definition files into the working
+tree without committing. Drop it (and have `gh` authenticated) to open a PR.
+
+The component's **language** (Java/.NET) and **build root** (the directory with the
+`pom.xml` / `.sln`) are discovered from the changed files — nothing to configure.
+Override the root with `TESTGEN_COMPONENT_DIR` if your layout is unusual.
+
+See the repository root README for the full pipeline, configuration, and the
+reusable GitHub Action wrapper.

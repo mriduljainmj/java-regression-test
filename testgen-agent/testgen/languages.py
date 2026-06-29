@@ -35,6 +35,7 @@ class LanguageProfile:
     test_cmd: list                # argv template; {pom}/{dir} filled at call time
     report_rel: Optional[str]     # relative Cucumber-JSON report path, or None
     prompt_notes: str             # language-specific glue-writing guidance
+    build_files: tuple = ()       # filenames/globs that mark a component root
 
 
 # Matches Java Cucumber step annotations: @Given("…"), @When("…"), @Then("…"), …
@@ -65,6 +66,7 @@ JAVA = LanguageProfile(
     step_attr_re=_JAVA_STEP_RE,
     test_cmd=["mvn", "-B", "-f", "{pom}", "test"],
     report_rel="target/cucumber-report.json",
+    build_files=("pom.xml", "build.gradle", "build.gradle.kts"),
     prompt_notes=(
         "Write Java step definitions with cucumber-java annotations "
         '(@Given/@When/@Then) and cucumber expressions ({string}, {int}, '
@@ -91,6 +93,7 @@ DOTNET = LanguageProfile(
     step_attr_re=_DOTNET_STEP_RE,
     test_cmd=["dotnet", "test", "{dir}"],
     report_rel=None,  # parse `dotnet test` console output instead of a JSON report
+    build_files=("*.sln", "*.csproj"),
     prompt_notes=(
         "Write C# step definitions with Reqnroll/SpecFlow attributes "
         '([Given(@"…")], [When(@"…")], [Then(@"…")]) using REGEX step text with '
@@ -132,6 +135,71 @@ def profile_for(name: str) -> LanguageProfile:
     if name not in PROFILES:
         raise ValueError(f"unknown language profile {name!r}; have {list(PROFILES)}")
     return PROFILES[name]
+
+
+_SKIP_PARTS = {".git", "target", "bin", "obj", "build", "node_modules", ".venv", "venv"}
+
+
+def _dir_has_build_file(d: Path, profile: LanguageProfile) -> bool:
+    for pat in profile.build_files:
+        if "*" in pat:
+            if any(d.glob(pat)):
+                return True
+        elif (d / pat).is_file():
+            return True
+    return False
+
+
+def discover_component_root(repo, profile: LanguageProfile, changed_files: list) -> str:
+    """Find the component's build root for an ARBITRARY repo layout, so the agent
+    isn't tied to the sample's `java-component/` etc. Returns a path relative to
+    the repo (or "." for the repo root).
+
+    Strategy: (1) walk up from each changed source file to the nearest build file
+    (pom.xml/gradle for Java, .sln/.csproj for .NET — .sln preferred so
+    `dotnet test` covers the whole solution); (2) else the shallowest build file
+    in the repo; (3) else the repo root."""
+    repo = Path(repo).resolve()
+
+    def rel(d: Path) -> str:
+        r = d.resolve().relative_to(repo)
+        return str(r) if str(r) != "." else "."
+
+    def _dir_matches(d: Path, pat: str) -> bool:
+        return any(d.glob(pat)) if "*" in pat else (d / pat).is_file()
+
+    # 1. Walk up from a changed source file, honoring build-file PREFERENCE across
+    #    levels: a higher .sln beats a nearer .csproj (so `dotnet test` runs the
+    #    whole solution), and pom.xml beats gradle. Patterns are in preference order.
+    for cf in changed_files:
+        if not cf.endswith(profile.source_ext):
+            continue
+        for pat in profile.build_files:
+            d = (repo / cf).parent
+            while True:
+                if _dir_matches(d, pat):
+                    return rel(d)
+                if d == repo or repo not in d.parents:
+                    break
+                d = d.parent
+        break  # only consider the first changed source file
+
+    # 2. Shallowest build file anywhere in the repo. For .NET, a directory with a
+    #    .sln wins over one with only a .csproj (so `dotnet test` runs everything).
+    def candidates(pattern):
+        out = []
+        for p in repo.rglob(pattern):
+            if not any(part in _SKIP_PARTS for part in p.relative_to(repo).parts):
+                out.append(p.parent)
+        return out
+
+    for pat in profile.build_files:  # build_files is ordered by preference
+        dirs = candidates(pat)
+        if dirs:
+            return rel(min(dirs, key=lambda d: len(d.relative_to(repo).parts)))
+
+    # 3. Fallback: repo root.
+    return "."
 
 
 # --------------------------------------------------------------------------- #

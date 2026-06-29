@@ -9,6 +9,7 @@ from testgen.languages import (
     JAVA,
     compile_step,
     detect_language,
+    discover_component_root,
     extract_step_patterns,
 )
 
@@ -58,6 +59,52 @@ public class ProductSteps
     public void ThenStatus(int code) { }
 }
 '''
+
+
+class ComponentRootDiscoveryTest(unittest.TestCase):
+    def _repo(self, files):
+        d = tempfile.mkdtemp()
+        repo = Path(d)
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        for rel, content in files.items():
+            p = repo / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content)
+        return repo
+
+    def test_java_nested_component(self):
+        repo = self._repo({"svc/pom.xml": "<project/>",
+                           "svc/src/main/java/Foo.java": "class Foo {}"})
+        root = discover_component_root(str(repo), JAVA, ["svc/src/main/java/Foo.java"])
+        self.assertEqual(root, "svc")
+
+    def test_java_at_repo_root(self):
+        repo = self._repo({"pom.xml": "<project/>", "src/main/java/Foo.java": "class Foo {}"})
+        self.assertEqual(discover_component_root(str(repo), JAVA, ["src/main/java/Foo.java"]), ".")
+
+    def test_dotnet_prefers_solution_over_csproj(self):
+        # .sln one level up beats the nearer .csproj so `dotnet test` runs everything.
+        repo = self._repo({
+            "App.sln": "Microsoft Visual Studio Solution File",
+            "Api/Api.csproj": "<Project/>",
+            "Api/Controllers/X.cs": "class X {}",
+        })
+        root = discover_component_root(str(repo), DOTNET, ["Api/Controllers/X.cs"])
+        self.assertEqual(root, ".")
+
+    def test_dotnet_csproj_when_no_solution(self):
+        repo = self._repo({"src/App.csproj": "<Project/>", "src/X.cs": "class X {}"})
+        self.assertEqual(discover_component_root(str(repo), DOTNET, ["src/X.cs"]), "src")
+
+    def test_no_build_file_falls_back_to_repo_root(self):
+        repo = self._repo({"src/main/java/Foo.java": "class Foo {}"})
+        self.assertEqual(discover_component_root(str(repo), JAVA, ["src/main/java/Foo.java"]), ".")
+
+    def test_skips_build_output_dirs(self):
+        repo = self._repo({"svc/pom.xml": "<project/>",
+                           "svc/target/generated/pom.xml": "<project/>"})
+        # No changed files → shallowest pom outside target/.
+        self.assertEqual(discover_component_root(str(repo), JAVA, []), "svc")
 
 
 class DotnetGlueTest(unittest.TestCase):

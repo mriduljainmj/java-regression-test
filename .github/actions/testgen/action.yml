@@ -1,0 +1,87 @@
+name: "Generate regression tests"
+description: >
+  Detect the component language (Java/.NET), generate BDD tests from the git diff,
+  run them and self-correct from failures, then open a PR. Wraps the pip-installed
+  `testgen` CLI so a component repo consumes it in one step — no copied folders.
+
+inputs:
+  base:
+    description: "Base ref/SHA to diff against (state before the change)"
+    required: true
+  head:
+    description: "Head ref/SHA (default: HEAD)"
+    required: false
+    default: ""
+  repo:
+    description: "Path to the checked-out repo to operate on"
+    required: false
+    default: "."
+  work-item:
+    description: "ADO work-item id (empty = auto-detect AB#nnn from commits)"
+    required: false
+    default: ""
+  reviewer-input:
+    description: "Reviewer guidance fed into generation"
+    required: false
+    default: ""
+  no-pr:
+    description: "If 'true', write files only — don't open a PR"
+    required: false
+    default: "false"
+  openrouter-api-key:
+    description: "OpenRouter API key"
+    required: true
+  github-token:
+    description: "Token for `gh pr create` (usually secrets.GITHUB_TOKEN)"
+    required: false
+    default: ""
+  agent-repo:
+    description: "owner/repo hosting the testgen-agent package"
+    required: false
+    default: "mriduljainmj/java-regression-test"
+  agent-ref:
+    description: "git ref/tag of the agent to install"
+    required: false
+    default: "main"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    # Both toolchains so the agent can run `mvn test` OR `dotnet test`, whichever
+    # the detected language needs.
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: "17"
+        cache: maven
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: "8.0.x"
+
+    - name: Install the agent
+      shell: bash
+      run: |
+        pip install "git+https://github.com/${{ inputs.agent-repo }}.git@${{ inputs.agent-ref }}#subdirectory=testgen-agent"
+
+    - name: Generate tests
+      shell: bash
+      working-directory: ${{ inputs.repo }}
+      env:
+        OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        # ADO ticket context — optional; pass via the calling job's env if used.
+        ADO_ORG: ${{ env.ADO_ORG }}
+        ADO_PROJECT: ${{ env.ADO_PROJECT }}
+        AZURE_DEVOPS_PAT: ${{ env.AZURE_DEVOPS_PAT }}
+      run: |
+        git config user.name "testgen-agent"
+        git config user.email "testgen-agent@users.noreply.github.com"
+        testgen --repo . --base "${{ inputs.base }}" \
+          ${{ inputs.head && format('--head {0}', inputs.head) || '' }} \
+          ${{ inputs.work-item && format('--work-item {0}', inputs.work-item) || '' }} \
+          ${{ inputs.no-pr == 'true' && '--no-pr' || '' }} \
+          --reviewer-input "${{ inputs.reviewer-input }}"

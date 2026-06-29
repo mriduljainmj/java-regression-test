@@ -84,7 +84,7 @@ class ScenarioFailureTest(unittest.TestCase):
                 ]},
             ],
         }])
-        failures = _extract_scenario_failures_java(self.repo, JAVA)
+        failures = _extract_scenario_failures_java(self.repo, JAVA, COMPONENT_DIR)
         self.assertEqual(len(failures), 1)
         self.assertIn("Retrieve a product that does not exist", failures[0])
         self.assertIn("Product not found", failures[0])
@@ -95,7 +95,7 @@ class ScenarioFailureTest(unittest.TestCase):
             "elements": [{"type": "scenario", "name": "ok", "steps": [
                 {"keyword": "When ", "name": "x", "result": {"status": "passed"}}]}],
         }])
-        self.assertEqual(_extract_scenario_failures_java(self.repo, JAVA), [])
+        self.assertEqual(_extract_scenario_failures_java(self.repo, JAVA, COMPONENT_DIR), [])
 
     def test_undefined_step_is_a_failure(self):
         self._write([{
@@ -104,14 +104,14 @@ class ScenarioFailureTest(unittest.TestCase):
                 {"keyword": "When ", "name": "an undefined step",
                  "result": {"status": "undefined"}}]}],
         }])
-        failures = _extract_scenario_failures_java(self.repo, JAVA)
+        failures = _extract_scenario_failures_java(self.repo, JAVA, COMPONENT_DIR)
         self.assertEqual(len(failures), 1)
         self.assertIn("undefined", failures[0])
 
     def test_no_report_file_yields_no_failures(self):
         # No report was written (compile failed before tests ran, say).
         self.assertFalse(self.report.exists())
-        self.assertEqual(_extract_scenario_failures_java(self.repo, JAVA), [])
+        self.assertEqual(_extract_scenario_failures_java(self.repo, JAVA, COMPONENT_DIR), [])
 
 
 if __name__ == "__main__":
