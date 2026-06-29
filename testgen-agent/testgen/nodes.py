@@ -551,8 +551,10 @@ def validate_output(state: TestGenState) -> TestGenState:
         patterns_in_file = extract_step_patterns(glue.content)
         if not patterns_in_file:
             errors.append(
-                f"{name}: contains no @Given/@When/@Then step definitions — "
-                "if no new glue is needed, return an empty new_or_modified_step_definitions list"
+                f"{name}: contains no [Given]/[When]/[Then] step definitions — "
+                "if no new glue is needed, return an empty new_or_modified_step_definitions list. "
+                "IF YOU INTRODUCED NEW STEPS in the feature file, this file MUST contain matching "
+                "[Given], [When], [Then] method implementations for EVERY step used in the feature."
             )
         
         # For C# files, check for Java-style annotations (@Given, @When, @Then)
@@ -677,6 +679,25 @@ def validate_output(state: TestGenState) -> TestGenState:
                 "RETRY: Call the LLM again, and instruct it to generate a SpecFlow feature "
                 "for the changed endpoint(s)."
             )
+
+    # Check for orphaned step definition files (created but empty)
+    # If a step definition file was created, it MUST contain [Given]/[When]/[Then] methods
+    feature_steps_used = set()
+    for feature in generation.new_or_modified_features:
+        for step in find_undefined_steps(feature.gherkin_content, []):
+            feature_steps_used.add(step)
+    
+    if feature_steps_used:
+        for glue in generation.new_or_modified_step_definitions:
+            if not extract_step_patterns(glue.content):
+                errors.append(
+                    f"❌ {glue.file_name}: Step definition file was created but is EMPTY.\n"
+                    f"The corresponding feature file uses custom steps that are NOT in existing bindings.\n"
+                    f"This STEPDEF file MUST contain [Given], [When], [Then] methods matching these feature steps:\n"
+                    f"  {chr(10).join(sorted(list(feature_steps_used)[:5]))}\n"
+                    f"If there are more than 5 steps, implement all of them.\n"
+                    f"RETRY: Return a complete C# step definition file with full method implementations."
+                )
 
     if errors:
         logger.warning("Validation failed (attempt %d): %s", state["attempts"], errors)

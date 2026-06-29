@@ -64,6 +64,16 @@ STEP MATCHING CONTRACT (CRITICAL)
  - If there are no existing SpecFlow step definitions in the repo, generate full C# glue for every generated step in a STEPDEF CREATE or UPDATE block.
  - If any generated step text is new or does not match an existing binding, you MUST include a matching STEPDEF CREATE or UPDATE block with the full `.cs` file.
 
+⚠️ STEP REUSE MANDATE (CRITICAL):
+ - BEFORE writing a feature step, check the provided existing step definitions (in section 3)
+ - If an existing step pattern can be reused (even if parameters differ slightly), USE IT
+ - Example: Instead of writing "Given a product exists with name "Widget" and price 100.00"
+           Use the existing pattern: "Given a product with price 100 exists"
+ - Example: Instead of "When I request order total for product 1 with 5 items and loyalty false"
+           Use a pattern like: "When I submit a POST request with body" or generate exact matching glue
+ - You MUST provide complete C# step definitions for ANY new step wording that deviates from existing patterns
+ - If you introduce new steps that don't match existing bindings, INCLUDE a full STEPDEF block with [Given]/[When]/[Then] implementations
+
 C# SPECFLOW SYNTAX (NOT JAVA) - MANDATORY ENFORCEMENT
 ===================================================
 
@@ -171,15 +181,24 @@ If you observe ANY .NET source code changes (*.cs files, controllers, services, 
   3. DO NOT output empty file lists just because Java wasn't touched
   4. Include both happy-path and edge-case scenarios (invalid input, errors, auth failures)
 
+🔍 STEP DEFINITION REUSE REQUIREMENT (MANDATORY):
+  ✅ BEFORE writing ANY step, check section 3 for existing steps
+  ✅ If an existing step definition can be reused (exact or with parameter placeholders), USE IT
+  ✅ If NO existing step matches, you MUST generate a complete [Given]/[When]/[Then] implementation
+  ✅ Never output a feature with undefined steps — either reuse existing or provide glue code
+  ❌ DO NOT generate feature files with custom steps unless you also provide the full C# step definitions
+  
+Step Reuse Examples:
+  - Existing: [Given("a product with price {decimal} exists")] → use it: Given a product with price 100 exists
+  - Existing: [When("I request a bulk discount for {int} items")] → use it: When I request a bulk discount for 5 items
+  - New custom step needed? → MUST include === STEPDEF CREATE/UPDATE block with full C# code
+
 Your output MUST include:
   - ANALYSIS line describing the changes
   - ENDPOINTS line listing all impacted API endpoints
   - At least one === FEATURE CREATE/UPDATE ... === block for new/modified endpoint coverage
-  - Any === STEPDEF CREATE/UPDATE ... === blocks for new step definitions needed
-
-IMPORTANT: If there are no existing SpecFlow step definitions that cover a generated step,
-include a full STEPDEF CREATE or UPDATE block for the matching C# glue file under
-`dotnet-component/Tests/`. Do not return only the feature file when new step wording is needed.
+  - IF using any new/non-existing step patterns: === STEPDEF CREATE/UPDATE ... === block with full C# implementations
+  - Every step in the feature MUST match an existing binding or have matching glue code in the STEPDEF block
 
 CRITICAL REMINDER: This is a C# / SpecFlow project, NOT Java. Always use C# syntax:
  - Step definitions use [Given], [When], [Then] attributes (NOT @Given, @When, @Then)
