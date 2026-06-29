@@ -7,12 +7,11 @@ namespace BP.Models
         public int ProductId { get; set; }
 
         [Required]
-        public string Name { get; set; }
+        public required string Name { get; set; }
 
         [Range(0.01, double.MaxValue, ErrorMessage = "Price must be greater than 0")]
         public double Price { get; set; }
 
-        // Product availability in inventory
         public bool InStock { get; set; }
     }
 }
