@@ -9,6 +9,8 @@
   <!-- Exclude Tests folder from main project compilation -->
   <ItemGroup>
     <Compile Remove="Tests/**" />
+    <Compile Remove="obj-tests/**" />
+    <Compile Remove="bin-tests/**" />
   </ItemGroup>
 
   <ItemGroup>

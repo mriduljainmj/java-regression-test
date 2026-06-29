@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'BP.Tests'">
+    <BaseIntermediateOutputPath>obj-tests\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>obj-tests\</MSBuildProjectExtensionsPath>
+    <BaseOutputPath>bin-tests\</BaseOutputPath>
+  </PropertyGroup>
+</Project>

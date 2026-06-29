@@ -9,6 +9,7 @@
 
   <!-- Exclude main project source files - they are accessed via ProjectReference (BP.dll) -->
   <ItemGroup>
+    <Compile Remove="obj/**/*.cs" />
     <Compile Remove="Controllers/**/*.cs" />
     <Compile Remove="Services/**/*.cs" />
     <Compile Remove="Models/**/*.cs" />
