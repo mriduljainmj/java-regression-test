@@ -1,6 +1,5 @@
 using BP.Services;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.OpenApi;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -33,7 +32,6 @@ app.UseAuthorization();
 // Health check endpoint
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
     .WithName("Health")
-    .WithOpenApi()
     .Produces<object>(StatusCodes.Status200OK);
 
 app.MapControllers();
