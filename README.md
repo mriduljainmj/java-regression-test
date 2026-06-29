@@ -178,6 +178,53 @@ Run workflow, setting `base` to the commit before the change.
 - Scenarios that *should* exist aren't missing (each changed/added endpoint covered,
   happy + unhappy paths)?
 
+## Troubleshooting
+
+### .NET SpecFlow Tests Failing - "TechTalk" Namespace Not Found
+
+**Problem**: Compiler errors like:
+```
+error CS0246: The type or namespace name 'TechTalk' could not be found
+error CS0246: The type or namespace name 'Binding' could not be found
+```
+
+**Solution**: Ensure BP.Tests.csproj has proper item groups:
+```xml
+<ItemGroup>
+  <Compile Include="Tests/**/*.cs" />
+</ItemGroup>
+
+<ItemGroup>
+  <SpecFlowFeatureFiles Include="Tests/Features/**/*.feature" />
+</ItemGroup>
+```
+
+**Then rebuild:**
+```bash
+cd dotnet-component
+dotnet clean
+dotnet build
+dotnet test
+```
+
+### Java Tests Failing - Maven Not Found
+
+**Problem**: `mvn: command not found`
+
+**Solution**: 
+```bash
+# Install Maven
+brew install maven                    # Mac
+sudo apt-get install maven            # Linux
+choco install maven                   # Windows (admin)
+
+# Or set MAVEN_HOME
+export MAVEN_HOME=/path/to/maven
+export PATH=$PATH:$MAVEN_HOME/bin
+```
+
+---
+
 ## Limitations
 
 ### How much change one run can handle

@@ -25,4 +25,9 @@
     <SpecFlowFeatureFiles Include="Tests/Features/**/*.feature" />
   </ItemGroup>
 
+  <!-- Include C# test files -->
+  <ItemGroup>
+    <Compile Include="Tests/**/*.cs" />
+  </ItemGroup>
+
 </Project>
