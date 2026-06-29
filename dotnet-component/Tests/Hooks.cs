@@ -1,5 +1,6 @@
 using System;
 using System.Net.Http;
+using Microsoft.AspNetCore.Mvc.Testing;
 using BoDi;
 using TechTalk.SpecFlow;
 
@@ -9,6 +10,8 @@ namespace BP.Tests
     public class Hooks
     {
         private readonly IObjectContainer _objectContainer;
+        private WebApplicationFactory<Program>? _factory;
+        private HttpClient? _httpClient;
 
         public Hooks(IObjectContainer objectContainer)
         {
@@ -18,20 +21,17 @@ namespace BP.Tests
         [BeforeScenario]
         public void BeforeScenario()
         {
-            // Create HttpClient for testing
-            var httpClient = new HttpClient
-            {
-                BaseAddress = new Uri("http://localhost:5000")
-            };
-            
-            // Register HttpClient in the DI container for step definitions
-            _objectContainer.RegisterInstanceAs(httpClient);
+            _factory = new WebApplicationFactory<Program>();
+            _httpClient = _factory.CreateClient();
+
+            _objectContainer.RegisterInstanceAs(_httpClient);
         }
 
         [AfterScenario]
         public void AfterScenario()
         {
-            // Cleanup after each scenario
+            _httpClient?.Dispose();
+            _factory?.Dispose();
         }
     }
 }

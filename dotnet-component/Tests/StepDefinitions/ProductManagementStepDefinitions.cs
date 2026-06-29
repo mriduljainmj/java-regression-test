@@ -55,5 +55,13 @@ namespace BP.Tests.StepDefinitions
             var response = await _httpClient.DeleteAsync($"/api/products/{id}");
             _scenarioContext["response"] = response;
         }
+
+        [When(@"^a client PATCHes /api/products/(\d+)/stock with body$")]
+        public async Task WhenAClientPatchesApiProductsStockWithBody(int id, string body)
+        {
+            var content = new StringContent(body.Trim(), Encoding.UTF8, "application/json");
+            var response = await _httpClient.PatchAsync($"/api/products/{id}/stock", content);
+            _scenarioContext["response"] = response;
+        }
     }
 }

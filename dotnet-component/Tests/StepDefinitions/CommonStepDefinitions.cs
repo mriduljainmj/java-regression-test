@@ -52,5 +52,16 @@ namespace BP.Tests.StepDefinitions
             var actual = doc.RootElement.GetProperty(key).GetInt32();
             Assert.Equal(value, actual);
         }
+
+        [Then(@"^the response JSON should contain ""([^""]+)"": (true|false)$")]
+        public async Task ThenTheResponseJsonShouldContainBoolField(string key, string value)
+        {
+            var response = (HttpResponseMessage)_scenarioContext["response"];
+            var body = await response.Content.ReadAsStringAsync();
+            var doc = JsonDocument.Parse(body);
+            bool expected = bool.Parse(value);
+            bool actual = doc.RootElement.GetProperty(key).GetBoolean();
+            Assert.Equal(expected, actual);
+        }
     }
 }

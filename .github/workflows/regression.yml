@@ -44,36 +44,15 @@ jobs:
           fi
           
           echo "=========================================="
-          echo "Starting .NET application server..."
+          echo "Running .NET regression tests..."
           echo "=========================================="
           if [ -f dotnet-component/BP.csproj ]; then
-            # Build the app first, then start it in the background
             cd dotnet-component
-            dotnet build BP.csproj -c Debug --nologo
-            dotnet run --no-build > /tmp/app.log 2>&1 &
-            APP_PID=$!
-            echo "App started with PID: $APP_PID"
-            
-            # Wait for app to boot
-            echo "Waiting for app to boot..."
-            sleep 5
-            
-            echo "=========================================="
-            echo "Running .NET regression tests..."
-            echo "=========================================="
-            # Run the tests
             dotnet test BP.Tests.csproj --nologo --verbosity minimal --logger trx
             TEST_RESULT=$?
-            
-            # Clean up - stop the app
-            echo "=========================================="
-            echo "Stopping .NET application..."
-            echo "=========================================="
-            kill $APP_PID 2>/dev/null || true
-            wait $APP_PID 2>/dev/null || true
-            
+
             cd ..
-            
+
             if [ $TEST_RESULT -ne 0 ]; then
               echo "❌ .NET tests failed"
               exit $TEST_RESULT
