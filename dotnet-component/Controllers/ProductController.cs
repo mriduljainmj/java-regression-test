@@ -28,6 +28,15 @@ namespace BP.Controllers
             var products = _service.GetAll();
             return Ok(products);
         }
+
+        [HttpGet("in-stock")]
+        [ProducesResponseType(typeof(IEnumerable<Product>), StatusCodes.Status200OK)]
+        public ActionResult<IEnumerable<Product>> GetInStock()
+        {
+            var products = _service.GetInStockProducts();
+            return Ok(products);
+        }
+
         [HttpGet("{id}")]
         public ActionResult<Product> GetById(int id)
         {
