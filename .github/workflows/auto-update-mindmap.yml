@@ -38,6 +38,11 @@ jobs:
             FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
           fi
           echo "files=$FILES" >> $GITHUB_OUTPUT
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
       
       - name: Update PROJECT.md
         env:
@@ -48,13 +53,10 @@ jobs:
       - name: Push updates
         if: always()
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Only push if there are staged changes
-          if git diff --cached --quiet; then
-            echo "ℹ️  No changes to PROJECT.md"
-          else
-            git push
+          # Push if local branch is ahead (commit was created by updater)
+          if [ "$(git rev-list --count origin/${{ github.ref_name }}..HEAD)" -gt 0 ]; then
+            git push origin HEAD:${{ github.ref_name }}
             echo "✅ PROJECT.md updates pushed"
+          else
+            echo "ℹ️  No new commit to push"
           fi
