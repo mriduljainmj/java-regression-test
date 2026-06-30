@@ -45,6 +45,14 @@ TEST_TIMEOUT = int(os.environ.get("TESTGEN_TEST_TIMEOUT", "900"))
 # enough that the full component source + features + step definitions fit.
 MAX_CONTEXT_CHARS = int(os.environ.get("TESTGEN_MAX_CONTEXT_CHARS", "60000"))
 
+# Per-model retry tuning for transient OpenRouter rate limits.
+MODEL_RETRIES = int(os.environ.get("TESTGEN_MODEL_RETRIES", "6"))
+BACKOFF_SCHEDULE = [
+    int(v.strip())
+    for v in os.environ.get("TESTGEN_BACKOFF_SECONDS", "8,20,45,90,120,180").split(",")
+    if v.strip()
+]
+
 # Free models are shared pools and get rate-limited upstream (429) without warning.
 # Tried in order; on 429/5xx the next model is attempted, so one congested pool
 # doesn't fail the whole run. Override the whole chain with TESTGEN_MODELS
@@ -406,9 +414,9 @@ def generate_tests(state: TestGenState) -> TestGenState:
     rate_limit_models = set()  # Track which models hit rate limits
 
     # Outer loop: fall back across models. Inner loop: retry each model with
-    # exponential backoff (5s, 20s, 60s) — free-pool 429s usually clear in seconds.
+    # configurable backoff — free-pool 429s can last several minutes.
     for model in models:
-        retries_left = 4  # Increased to 4 for more 429 retries
+        retries_left = MODEL_RETRIES
         while retries_left > 0 and response_text is None:
             try:
                 response = client.chat.completions.create(
@@ -441,8 +449,11 @@ def generate_tests(state: TestGenState) -> TestGenState:
                 
                 retries_left -= 1
                 if retries_left > 0:
-                    # Longer backoff for 429: 5s, 15s, 30s, 60s
-                    sleep_time = [5, 15, 30, 60][4 - retries_left]
+                    retry_index = max(0, MODEL_RETRIES - retries_left - 1)
+                    if retry_index >= len(BACKOFF_SCHEDULE):
+                        sleep_time = BACKOFF_SCHEDULE[-1]
+                    else:
+                        sleep_time = BACKOFF_SCHEDULE[retry_index]
                     logger.info("Retrying in %ds... (retries_left=%d)", sleep_time, retries_left)
                     time.sleep(sleep_time)
         if response_text is not None:
