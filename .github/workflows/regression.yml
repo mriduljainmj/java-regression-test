@@ -48,8 +48,13 @@ jobs:
           echo "=========================================="
           if [ -f dotnet-component/BP.csproj ]; then
             cd dotnet-component
-            dotnet test BP.Tests.csproj --nologo --verbosity minimal --logger trx
+            dotnet test BP.Tests.csproj --nologo --verbosity minimal --results-directory TestResults --logger "trx;LogFileName=dotnet-tests.trx"
             TEST_RESULT=$?
+
+            # Generate a readable BDD HTML report (SpecFlow LivingDoc)
+            export PATH="$PATH:$HOME/.dotnet/tools"
+            dotnet tool update --global SpecFlow.Plus.LivingDoc.CLI --version 3.*
+            livingdoc test-assembly bin-tests/Debug/net9.0/BP.Tests.dll -t TestResults/dotnet-tests.trx -o TestResults/dotnet-livingdoc.html || true
 
             cd ..
 
@@ -76,4 +81,12 @@ jobs:
         with:
           name: dotnet-test-results
           path: "**/TestResults/**/*.trx"
+          if-no-files-found: warn
+
+      - name: Upload .NET BDD report (LivingDoc HTML)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cucumber-report-dotnet
+          path: dotnet-component/TestResults/dotnet-livingdoc.html
           if-no-files-found: warn
