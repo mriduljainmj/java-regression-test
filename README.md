@@ -159,12 +159,28 @@ e.g. via `~/.mavenrc`.)
 
 1. Change the component — add a validation rule, a new conditional path, or a whole
    new controller (no step definitions needed: the agent proposes its own glue).
-2. Push to `main` → `generate-tests.yml` opens a PR with new/updated scenarios
+2. If the change is tied to an Azure DevOps ticket, include the work item id in the
+  commit/merge message as `AB#1234` or set `AZDO_WORK_ITEM_ID` so the generator can
+  pull title/description/acceptance criteria into the test prompt and PR body.
+3. Push to `main` → `generate-tests.yml` opens a PR with new/updated scenarios
    (and glue, if required).
-3. **Check the PR's regression run is green, then review the Gherkin** — exact
+4. **Check the PR's regression run is green, then review the Gherkin** — exact
    boundary values and error messages are where models slip, and the reviewer's
    question is "is this newly asserted behavior actually what we wanted?"
-4. Merge → `regression.yml` confirms code and suite are in sync on `main`.
+5. Merge → `regression.yml` confirms code and suite are in sync on `main`.
+
+### Azure DevOps integration
+
+To enrich generated tests with ADO ticket context, configure these repository
+secrets in GitHub Actions:
+
+- `AZDO_ORG_URL` - your Azure DevOps organization URL, e.g. `https://dev.azure.com/your-org`
+- `AZDO_PROJECT` - your Azure DevOps project name
+- `AZDO_PAT` - a PAT with work item read access
+
+The generator will automatically look for a work item id in the commit/merge message
+using `AB#1234`, `ADO-1234`, or `WI-1234`. You can also override it manually when
+running the workflow with `workflow_dispatch`.
 
 To replay a past diff without pushing: Actions → *Generate regression tests* →
 Run workflow, setting `base` to the commit before the change.

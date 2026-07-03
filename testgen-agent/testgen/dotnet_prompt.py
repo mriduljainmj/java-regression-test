@@ -172,6 +172,9 @@ USER_PROMPT_TEMPLATE = """\
 4. API SPECIFICATION / SWAGGER (If available):
 {api_spec}
 
+5. AZURE DEVOPS WORK ITEM CONTEXT (If available):
+{ado_work_item_context}
+
 Analyze the changes and produce the regression test cases.
 
 ⚠️ CRITICAL REQUIREMENT: 

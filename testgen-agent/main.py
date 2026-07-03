@@ -11,6 +11,8 @@ Environment overrides:
     TESTGEN_MODEL / TESTGEN_MODELS   model or comma-separated fallback chain
     TESTGEN_MAX_ATTEMPTS             generation retry budget (default 3)
     TESTGEN_MAX_CONTEXT_CHARS        per-section context cap (default 60000)
+    AZDO_ORG_URL / AZDO_PROJECT / AZDO_PAT   optional Azure DevOps metadata lookup
+    AZDO_WORK_ITEM_ID                optional override for the detected work item id
 """
 
 import argparse
@@ -31,6 +33,8 @@ def main() -> int:
     parser.add_argument("--head", default="HEAD", help="Head ref/SHA (state after the change)")
     parser.add_argument("--no-pr", action="store_true",
                         help="Write feature files only; skip branch/commit/PR creation")
+    parser.add_argument("--ado-work-item-id", required=False, default="",
+                        help="Azure DevOps work item id to enrich the prompt and PR metadata")
     args = parser.parse_args()
 
     app = build_graph()
@@ -41,6 +45,7 @@ def main() -> int:
                 "base_ref": args.base,
                 "head_ref": args.head,
                 "create_pr": not args.no_pr,
+                "ado_work_item_id": args.ado_work_item_id.strip(),
             }
         )
     except Exception as e:

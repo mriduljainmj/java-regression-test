@@ -13,6 +13,7 @@ from typing import Optional
 from openai import OpenAI
 from pydantic import ValidationError
 
+from .ado import extract_work_item_id, fetch_work_item_context
 from .gherkin import extract_step_patterns, find_undefined_steps
 from .prompts import (
     OUTPUT_FORMAT_INSTRUCTIONS,
@@ -156,7 +157,7 @@ def collect_diff(state: TestGenState) -> TestGenState:
     elif java_changes:
         project_type = "java"
 
-    update: TestGenState = {"git_diff": diff, "changed_files": changed_files}
+    update: TestGenState = {"git_diff": diff, "changed_files": changed_files, "resolved_base": base}
     if project_type is None:
         update["skipped_reason"] = (
             "No Java or C# source changes between "
@@ -175,6 +176,36 @@ def gather_context(state: TestGenState) -> TestGenState:
 
     sources: list = []
     step_patterns: list = []
+
+    ado_work_item_id = state.get("ado_work_item_id") or os.environ.get("AZDO_WORK_ITEM_ID", "")
+    if not ado_work_item_id:
+        commit_messages = ""
+        resolved_base = state.get("resolved_base") or state["base_ref"]
+        try:
+            commit_messages = _run(
+                ["git", "log", "--format=%B", f"{resolved_base}..{state['head_ref']}"],
+                cwd=str(repo),
+            )
+        except Exception:
+            commit_messages = ""
+        ado_work_item_id = extract_work_item_id(commit_messages) or ""
+
+    ado_org_url = state.get("ado_org_url") or os.environ.get("AZDO_ORG_URL", "")
+    ado_project = state.get("ado_project") or os.environ.get("AZDO_PROJECT", "")
+    ado_pat = os.environ.get("AZDO_PAT", "")
+    ado_work_item_context = "Not available."
+    if ado_work_item_id:
+        ado_work_item_context = fetch_work_item_context(
+            org_url=ado_org_url,
+            project=ado_project,
+            pat=ado_pat,
+            work_item_id=ado_work_item_id,
+        )
+    else:
+        ado_work_item_context = (
+            "No Azure DevOps work item id was detected. "
+            "Use AB#1234 / ADO-1234 in the commit or set AZDO_WORK_ITEM_ID to enrich the prompt."
+        )
 
     if project_type == "java":
         # All main-source Java files, with changed ones first.
@@ -245,6 +276,8 @@ def gather_context(state: TestGenState) -> TestGenState:
         "target_component_context": "\n\n".join(sources)[:MAX_CONTEXT_CHARS],
         "existing_feature_examples": "\n\n".join(features)[:MAX_CONTEXT_CHARS],
         "api_spec": api_spec[:MAX_CONTEXT_CHARS] or "Not available.",
+        "ado_work_item_id": ado_work_item_id,
+        "ado_work_item_context": ado_work_item_context[:MAX_CONTEXT_CHARS],
         "step_patterns": step_patterns,
         "attempts": 0,
         "validation_errors": [],
@@ -384,6 +417,7 @@ def generate_tests(state: TestGenState) -> TestGenState:
         git_diff=state["git_diff"][:MAX_CONTEXT_CHARS],
         existing_feature_examples=state["existing_feature_examples"],
         api_spec=state["api_spec"],
+        ado_work_item_context=state.get("ado_work_item_context", "Not available."),
     )
 
     if state.get("validation_errors"):
@@ -958,7 +992,9 @@ def create_pull_request(state: TestGenState) -> TestGenState:
         return {"pr_url": None, "skipped_reason": "generated tests are identical to the existing suite"}
 
     head_sha = _run(["git", "rev-parse", "--short=12", state["head_ref"]], cwd=repo).strip()
-    branch = f"testgen/{head_sha}-{int(time.time())}"
+    ado_work_item_id = state.get("ado_work_item_id") or os.environ.get("AZDO_WORK_ITEM_ID", "").strip()
+    branch_prefix = f"testgen/ado-{ado_work_item_id}-" if ado_work_item_id else "testgen/"
+    branch = f"{branch_prefix}{head_sha}-{int(time.time())}"
 
     original_ref = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo).strip()
     _run(["git", "checkout", "-b", branch], cwd=repo)
@@ -968,11 +1004,10 @@ def create_pull_request(state: TestGenState) -> TestGenState:
         if not staged:
             logger.info("nothing staged after add; skipping PR")
             return {"pr_url": None, "skipped_reason": "no effective changes to commit"}
-        _run(
-            ["git", "commit", "-m",
-             "test: regenerate Cucumber regression tests\n\n" + generation.analysis_summary],
-            cwd=repo,
-        )
+        commit_message = "test: regenerate Cucumber regression tests"
+        if ado_work_item_id:
+            commit_message = f"test: [ADO-{ado_work_item_id}] regenerate Cucumber regression tests"
+        _run(["git", "commit", "-m", commit_message + "\n\n" + generation.analysis_summary], cwd=repo)
         _run(["git", "push", "-u", "origin", branch], cwd=repo)
 
         endpoints = "\n".join(f"- `{e}`" for e in generation.impacted_endpoints) or "- none"
@@ -993,16 +1028,36 @@ def create_pull_request(state: TestGenState) -> TestGenState:
                 f"```\n{failures}\n```\n</details>"
             )
 
-        body = (
-            "## Auto-generated regression tests\n\n"
-            f"{generation.analysis_summary}\n\n"
-            f"### Test status\n{status}\n\n"
-            f"### Impacted endpoints\n{endpoints}\n\n"
-            f"### Files\n" + "\n".join(f"- `{f}`" for f in state["written_files"]) + "\n\n"
-            "Please review the scenarios before merging. Regression runs automatically "
-            "after merge.\n\n"
-            "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
-        )
+        if ado_work_item_id:
+            title = f"[ADO-{ado_work_item_id}] {title}"
+
+        body_parts = [
+            "## Auto-generated regression tests",
+            "",
+            generation.analysis_summary,
+            "",
+        ]
+        if ado_work_item_id:
+            body_parts.extend([
+                "### Azure DevOps work item",
+                state.get("ado_work_item_context", "Not available."),
+                "",
+            ])
+        body_parts.extend([
+            "### Test status",
+            status,
+            "",
+            "### Impacted endpoints",
+            endpoints,
+            "",
+            "### Files",
+            *[f"- `{f}`" for f in state["written_files"]],
+            "",
+            "Please review the scenarios before merging. Regression runs automatically after merge.",
+            "",
+            "🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+        ])
+        body = "\n".join(body_parts)
         pr_url = _run(
             ["gh", "pr", "create", "--title", title, "--body", body, "--head", branch, "--base", original_ref],
             cwd=repo,

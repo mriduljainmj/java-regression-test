@@ -65,6 +65,9 @@ class TestGenState(TypedDict, total=False):
     base_ref: str
     head_ref: str
     create_pr: bool
+    ado_work_item_id: str
+    ado_work_item_context: str
+    resolved_base: str
 
     # Gathered context
     git_diff: str

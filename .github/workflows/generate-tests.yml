@@ -17,6 +17,10 @@ on:
         description: "Base ref/SHA to diff against (empty = parent of HEAD)"
         required: false
         default: ""
+      ado_work_item_id:
+        description: "Azure DevOps work item id (optional override; commit message AB#1234 is also detected)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -60,6 +64,10 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AZDO_ORG_URL: ${{ secrets.AZDO_ORG_URL }}
+          AZDO_PROJECT: ${{ secrets.AZDO_PROJECT }}
+          AZDO_PAT: ${{ secrets.AZDO_PAT }}
+          AZDO_WORK_ITEM_ID: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ado_work_item_id || '' }}
           TESTGEN_MODEL_RETRIES: "6"
           TESTGEN_BACKOFF_SECONDS: "8,20,45,90,120,180"
         run: |
