@@ -80,6 +80,33 @@ def cucumber_expression_to_regex(expr: str):
     return re.compile("^" + "".join(regex_parts) + "$")
 
 
+def step_pattern_to_regex(pattern: str):
+    """Compile a step definition pattern (regex-style or cucumber-expression)."""
+    text = (pattern or "").strip()
+    # SpecFlow/Cucumber regex definitions often use anchors/capture groups and
+    # backslash tokens (e.g. ^... (\d+) ...$). Treat those as raw regex.
+    looks_like_regex = (
+        text.startswith("^")
+        or text.endswith("$")
+        or "\\d" in text
+        or "(" in text
+        or "[" in text
+        or "|" in text
+    )
+    if looks_like_regex:
+        candidate = text
+        if not candidate.startswith("^"):
+            candidate = "^" + candidate
+        if not candidate.endswith("$"):
+            candidate = candidate + "$"
+        try:
+            return re.compile(candidate)
+        except re.error:
+            # Fall back to cucumber-expression parsing if malformed regex slips in.
+            pass
+    return cucumber_expression_to_regex(text)
+
+
 def extract_scenario_steps(gherkin_text: str) -> list:
     """Extract concrete step texts from a feature file.
 
@@ -163,7 +190,7 @@ def extract_scenario_steps(gherkin_text: str) -> list:
 
 def find_undefined_steps(gherkin_text: str, step_patterns: list) -> list:
     """Return generated step texts that match no known step definition."""
-    compiled = [cucumber_expression_to_regex(p) for p in step_patterns]
+    compiled = [step_pattern_to_regex(p) for p in step_patterns]
     undefined = []
     for step in extract_scenario_steps(gherkin_text):
         if not any(r.match(step) for r in compiled):

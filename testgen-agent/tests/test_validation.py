@@ -198,7 +198,7 @@ class GlueValidationTest(unittest.TestCase):
             )],
         )
         out = validate_output(make_state(self.repo, generation))
-        self.assertTrue(any("contains no @Given/@When/@Then" in e
+        self.assertTrue(any("contains no [Given]/[When]/[Then]" in e
                             for e in out["validation_errors"]))
 
 
