@@ -14,8 +14,9 @@ loosely (any text) rather than rejected.
 
 import re
 _STEP_ANNOTATION_RE = re.compile(
-    # Match Java-style @Given("...") or C#-style [Given("...")]
-    r'(?:@|\[)(?:Given|When|Then|And|But)\s*\(\s*"((?:[^"\\]|\\.)*)"\s*\)\]?'
+    # Match Java-style @Given("...") and C#-style [Given("...")] or [Given(@"...")].
+    # Group 1 captures verbatim C# strings; group 2 captures regular escaped strings.
+    r'(?:@|\[)(?:Given|When|Then|And|But)\s*\(\s*(?:@"((?:[^"]|"")*)"|"((?:[^"\\]|\\.)*)")\s*\)\]?'
 )
 
 
@@ -40,9 +41,19 @@ def _unescape_java_string(s: str) -> str:
     return s.replace('\\"', '"').replace("\\\\", "\\")
 
 
+def _decode_annotation_string(verbatim_value: str, regular_value: str) -> str:
+    if verbatim_value is not None:
+        # C# verbatim strings escape quotes as doubled double-quotes.
+        return verbatim_value.replace('""', '"')
+    return _unescape_java_string(regular_value or "")
+
+
 def extract_step_patterns(java_source: str) -> list:
     """Return the cucumber expressions declared in a Java glue file."""
-    return [_unescape_java_string(m.group(1)) for m in _STEP_ANNOTATION_RE.finditer(java_source)]
+    return [
+        _decode_annotation_string(m.group(1), m.group(2))
+        for m in _STEP_ANNOTATION_RE.finditer(java_source)
+    ]
 
 
 def cucumber_expression_to_regex(expr: str):
