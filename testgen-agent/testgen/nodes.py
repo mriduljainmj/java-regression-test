@@ -190,6 +190,11 @@ def gather_context(state: TestGenState) -> TestGenState:
             commit_messages = ""
         ado_work_item_id = extract_work_item_id(commit_messages) or ""
 
+    if ado_work_item_id:
+        logger.info("ADO work item detected: %s", ado_work_item_id)
+    else:
+        logger.info("No ADO work item detected from state/env/commit range")
+
     ado_org_url = state.get("ado_org_url") or os.environ.get("AZDO_ORG_URL", "")
     ado_project = state.get("ado_project") or os.environ.get("AZDO_PROJECT", "")
     ado_pat = os.environ.get("AZDO_PAT", "")
@@ -201,6 +206,20 @@ def gather_context(state: TestGenState) -> TestGenState:
             pat=ado_pat,
             work_item_id=ado_work_item_id,
         )
+        if ado_work_item_context.startswith("Detected Azure DevOps work item"):
+            logger.warning("ADO context fetch issue: %s", ado_work_item_context)
+        elif ado_work_item_context == "Not available.":
+            logger.warning(
+                "ADO context not available. Check AZDO_ORG_URL, AZDO_PROJECT, AZDO_PAT, and work item id"
+            )
+        else:
+            preview = ado_work_item_context[:220].replace("\n", " | ")
+            logger.info(
+                "ADO context fetched for work item %s (len=%d): %s",
+                ado_work_item_id,
+                len(ado_work_item_context),
+                preview,
+            )
     else:
         ado_work_item_context = (
             "No Azure DevOps work item id was detected. "
