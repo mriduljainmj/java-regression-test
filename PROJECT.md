@@ -2,6 +2,8 @@
 
 *Last Updated: 2026-06-29 (Auto-updated on code changes)*
 
+*Last Updated: 2026-07-03 07:34:51 UTC*
+
 *This file is the AI's memory of the project. When loading this project, read this first to understand architecture, APIs, dependencies, and edge cases.*
 
 **🤖 Auto-Update System Active**: PROJECT.md stays in sync automatically. See [AUTO-UPDATE-GUIDE.md](AUTO-UPDATE-GUIDE.md) for setup and usage.
@@ -144,6 +146,11 @@ public Order create(OrderRequest req) {
 ### .NET COMPONENT (ASP.NET Core)
 
 #### **ProductController.cs** (`/api/products`)
+
+
+**[AUTO-UPDATE] .NET endpoints detected:**
+- PUT api/products/{id} (Update)
+- DELETE api/products/{id} (Delete)
 
 | Method | Endpoint | Input | Output | Edge Cases |
 |--------|----------|-------|--------|-----------|
