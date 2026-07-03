@@ -48,6 +48,13 @@ namespace BP.Tests.StepDefinitions
             _scenarioContext["response"] = response;
         }
 
+        [When(@"^a client requests GET /api/products/in-stock-count$")]
+        public async Task WhenAClientRequestsGetApiProductsInStockCount()
+        {
+            var response = await _httpClient.GetAsync("/api/products/in-stock-count");
+            _scenarioContext["response"] = response;
+        }
+
         [When(@"^a client PUTs /api/products/(\d+) with body$")]
         public async Task WhenAClientPutsApiProductsWithBody(int id, string body)
         {
