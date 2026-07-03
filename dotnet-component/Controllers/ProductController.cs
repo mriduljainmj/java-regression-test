@@ -45,6 +45,14 @@ namespace BP.Controllers
             return Ok(new { inStockCount = count });
         }
 
+        [HttpGet("in-stock-count")]
+        [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+        public IActionResult GetInStockCount()
+        {
+            var count = _service.GetProductInventoryCount();
+            return Ok(new { count });
+        }
+
         [HttpGet("{id}")]
         public ActionResult<Product> GetById(int id)
         {
