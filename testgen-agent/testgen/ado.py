@@ -92,18 +92,28 @@ def fetch_work_item_context(
     tags = fields.get("System.Tags", "")
     tag_text = tags.replace(";", ", ") if isinstance(tags, str) else ""
 
+    assigned_to_text = ""
+    if isinstance(assigned_to, dict):
+        assigned_to_text = str(assigned_to.get("displayName") or assigned_to.get("uniqueName") or "")
+    else:
+        assigned_to_text = str(assigned_to or "")
+
     lines = [
         f"Azure DevOps Work Item: {work_item_id}",
         f"Title: {title}" if title else "Title: (missing)",
         f"State: {state}" if state else "State: (missing)",
     ]
-    if assigned_to:
-        lines.append(f"Assigned To: {assigned_to}")
+    if assigned_to_text:
+        lines.append(f"Assigned To: {assigned_to_text}")
     if tag_text:
         lines.append(f"Tags: {tag_text}")
     if description:
         lines.append(f"Description: {description}")
+    else:
+        lines.append("Description: (missing)")
     if acceptance:
         lines.append(f"Acceptance Criteria: {acceptance}")
+    else:
+        lines.append("Acceptance Criteria: (missing)")
 
     return "\n".join(lines)

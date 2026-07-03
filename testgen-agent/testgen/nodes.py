@@ -213,11 +213,18 @@ def gather_context(state: TestGenState) -> TestGenState:
                 "ADO context not available. Check AZDO_ORG_URL, AZDO_PROJECT, AZDO_PAT, and work item id"
             )
         else:
-            preview = ado_work_item_context[:220].replace("\n", " | ")
+            has_description = "Description: (missing)" not in ado_work_item_context and "Description:" in ado_work_item_context
+            has_acceptance = (
+                "Acceptance Criteria: (missing)" not in ado_work_item_context
+                and "Acceptance Criteria:" in ado_work_item_context
+            )
+            preview = ado_work_item_context[:400].replace("\n", " | ")
             logger.info(
-                "ADO context fetched for work item %s (len=%d): %s",
+                "ADO context fetched for work item %s (len=%d, hasDescription=%s, hasAcceptance=%s): %s",
                 ado_work_item_id,
                 len(ado_work_item_context),
+                has_description,
+                has_acceptance,
                 preview,
             )
     else:
