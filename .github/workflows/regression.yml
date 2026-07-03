@@ -34,7 +34,7 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-      - name: Run regression suite (Java and .NET)
+      - name: Run Java regression suite
         run: |
           echo "Running Java regression tests..."
           if [ -f java-component/pom.xml ]; then
@@ -42,7 +42,9 @@ jobs:
           else
             echo "No Java test project found (java-component/pom.xml)"
           fi
-          
+
+      - name: Run .NET regression suite
+        run: |
           echo "=========================================="
           echo "Running .NET regression tests..."
           echo "=========================================="

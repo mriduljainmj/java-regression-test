@@ -37,7 +37,11 @@ jobs:
           else
             FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
           fi
-          echo "files=$FILES" >> $GITHUB_OUTPUT
+          {
+            echo "files<<EOF"
+            echo "$FILES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Configure git identity
         run: |
