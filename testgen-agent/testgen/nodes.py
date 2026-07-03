@@ -693,16 +693,26 @@ def validate_output(state: TestGenState) -> TestGenState:
         if not name.endswith(".feature"):
             errors.append(f"{name}: file name must end with .feature")
         
-        # Feature path validation: strict check for correct directory
-        if project_type == "dotnet":
+        # Feature path validation: classify by path first to avoid false project-type mismatches.
+        is_dotnet_feature_path = name.startswith("dotnet-component/") or "dotnet-component/Tests/Features" in name
+        is_java_feature_path = "src/test/resources/features" in name
+
+        if is_dotnet_feature_path:
             if "dotnet-component/Tests/Features" not in name:
                 errors.append(
                     f"{name}: .NET feature files MUST be under dotnet-component/Tests/Features/ "
                     f"not under {name.split('/')[0]}/. Use path: dotnet-component/Tests/Features/{name.split('/')[-1]}"
                 )
+        elif is_java_feature_path:
+            # Java path is valid; no additional checks needed.
+            pass
+        elif project_type == "dotnet":
+            errors.append(
+                f"{name}: .NET feature files MUST be under dotnet-component/Tests/Features/. "
+                f"Use path: dotnet-component/Tests/Features/{name.split('/')[-1]}"
+            )
         else:
-            if "src/test/resources/features" not in name:
-                errors.append(f"{name}: Java features must live under src/test/resources/features/")
+            errors.append(f"{name}: Java features must live under src/test/resources/features/")
         
         if not target.is_relative_to(repo):
             errors.append(f"{name}: path escapes the repository root")
