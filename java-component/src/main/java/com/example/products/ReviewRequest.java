@@ -9,7 +9,7 @@ public class ReviewRequest {
 
     @NotNull(message = "rating is required")
     @Min(value = 1, message = "rating must be at least 1")
-    @Max(value = 5, message = "rating must not exceed 5")
+    @Max(value = 4, message = "rating must not exceed 4")
     private Integer rating;
 
     @Size(max = 200, message = "comment must not exceed 200 characters")

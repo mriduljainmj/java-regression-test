@@ -2,7 +2,7 @@
 
 *Last Updated: 2026-06-29 (Auto-updated on code changes)*
 
-*Last Updated: 2026-07-06 10:03:37 UTC*
+*Last Updated: 2026-07-06 16:10:55 UTC*
 
 *This file is the AI's memory of the project. When loading this project, read this first to understand architecture, APIs, dependencies, and edge cases.*
 
@@ -363,6 +363,14 @@ Java Constraint: Cannot delete product with orders
 ---
 
 ## 🧪 PART 5: Test Generation Strategy
+
+
+**[AUTO-UPDATE] Feature scenarios detected:**
+
+**Review management** (6 scenarios):
+- Add a valid review
+- Accept the minimum valid rating
+- Rating summary after multiple reviews
 
 ### **When AI Generates Tests**
 
