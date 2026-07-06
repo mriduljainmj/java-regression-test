@@ -1,6 +1,10 @@
 # 🧠 Project AI Knowledge Base
 
-*This file is the AI's memory of the project. When loading this project, read this first to understand architecture, APIs, dependencies, and edge cases.*
+_Last Updated: 2026-06-29 (Auto-updated on code changes)_
+
+_Last Updated: 2026-07-06 16:48:04 UTC_
+
+_This file is the AI's memory of the project. When loading this project, read this first to understand architecture, APIs, dependencies, and edge cases._
 
 **🤖 Auto-Update System Active**: PROJECT.md stays in sync automatically. See [AUTO-UPDATE-GUIDE.md](AUTO-UPDATE-GUIDE.md) for setup and usage.
 
@@ -8,7 +12,7 @@
 
 ## 🤖 Auto-Generated Snapshot
 
-*Last updated: 2026-07-06 17:15:12 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
+_Last updated: 2026-07-06 17:15:12 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten._
 
 ### API Endpoints
 
@@ -126,6 +130,7 @@
 <!-- AUTO-UPDATE:END -->
 
 ## Quick Reference
+
 - **Java API**: `http://localhost:8080/api/v1/` (Spring Boot)
 - **.NET API**: `http://localhost:5000/api/` (ASP.NET Core 9.0)
 - **Test Generator**: LangGraph + OpenRouter LLM (Python)
@@ -197,15 +202,16 @@ java-regression-test/
 
 #### **ProductController.java** (`/api/v1/products`)
 
-| Method | Endpoint | Input | Output | Edge Cases |
-|--------|----------|-------|--------|-----------|
-| **GET** | `/api/v1/products` | `minPrice?`, `maxPrice?` | `List<Product>` + `X-Total-Count` header | Price range validation; empty list |
-| **GET** | `/api/v1/products/{id}` | Path: `id` | `Product` | Invalid ID → 404 |
-| **POST** | `/api/v1/products` | `ProductRequest` body | `Product` (201 Created) | Invalid request → 400 |
-| **PUT** | `/api/v1/products/{id}` | Path: `id`, `ProductRequest` body | `Product` | Invalid ID → 404, invalid data → 400 |
-| **DELETE** | `/api/v1/products/{id}` | Path: `id` | 204 No Content | Has orders → throw ProductHasOrdersException |
+| Method     | Endpoint                | Input                             | Output                                   | Edge Cases                                   |
+| ---------- | ----------------------- | --------------------------------- | ---------------------------------------- | -------------------------------------------- |
+| **GET**    | `/api/v1/products`      | `minPrice?`, `maxPrice?`          | `List<Product>` + `X-Total-Count` header | Price range validation; empty list           |
+| **GET**    | `/api/v1/products/{id}` | Path: `id`                        | `Product`                                | Invalid ID → 404                             |
+| **POST**   | `/api/v1/products`      | `ProductRequest` body             | `Product` (201 Created)                  | Invalid request → 400                        |
+| **PUT**    | `/api/v1/products/{id}` | Path: `id`, `ProductRequest` body | `Product`                                | Invalid ID → 404, invalid data → 400         |
+| **DELETE** | `/api/v1/products/{id}` | Path: `id`                        | 204 No Content                           | Has orders → throw ProductHasOrdersException |
 
 **ProductRequest Schema** (Java):
+
 ```java
 class ProductRequest {
     String name;        // required
@@ -215,6 +221,7 @@ class ProductRequest {
 ```
 
 **Dependencies in DELETE**:
+
 ```
 DELETE /api/v1/products/{id}
   ↓ calls
@@ -227,12 +234,13 @@ throw ProductHasOrdersException(id)   // Constraint violation
 
 #### **OrderController.java** (`/api/v1/orders`)
 
-| Method | Endpoint | Input | Output | Edge Cases |
-|--------|----------|-------|--------|-----------|
-| **POST** | `/api/v1/orders` | `OrderRequest` body | `Order` (201 Created) | Invalid product → 404, out of stock → 400 |
-| **GET** | `/api/v1/orders/{id}` | Path: `id` | `Order` | Invalid ID → 404 |
+| Method   | Endpoint              | Input               | Output                | Edge Cases                                |
+| -------- | --------------------- | ------------------- | --------------------- | ----------------------------------------- |
+| **POST** | `/api/v1/orders`      | `OrderRequest` body | `Order` (201 Created) | Invalid product → 404, out of stock → 400 |
+| **GET**  | `/api/v1/orders/{id}` | Path: `id`          | `Order`               | Invalid ID → 404                          |
 
 **OrderRequest Schema** (Java):
+
 ```java
 class OrderRequest {
     Long productId;     // required, must exist
@@ -241,17 +249,18 @@ class OrderRequest {
 ```
 
 **Validation Logic in Service**:
+
 ```java
 public Order create(OrderRequest req) {
     // 1. Check product exists
     if (!productService.findById(req.productId)) throw 404
-    
+
     // 2. Check product in stock
     if (!product.inStock) throw 400 "OutOfStock"
-    
+
     // 3. Validate quantity
     if (req.quantity <= 0 || req.quantity > 1000) throw 400 "InvalidQuantity"
-    
+
     // 4. Create and return
     Order o = new Order(req.productId, req.quantity);
     return repository.save(o);
@@ -264,24 +273,60 @@ public Order create(OrderRequest req) {
 
 #### **ProductController.cs** (`/api/products`)
 
-| Method | Endpoint | Input | Output | Edge Cases |
-|--------|----------|-------|--------|-----------|
-| **GET** | `/api/products` | none | `List<Product>` | Empty if no products |
-| **GET** | `/api/products/in-stock` | none | `{ total, items[] }` | Excludes out-of-stock |
-| **GET** | `/api/products/in-stock/count` | none | `{ count }` | 0 if all out of stock |
-| **GET** | `/api/products/search/{name}` | Path: `name`, Query: `minPrice?`, `maxPrice?` | `{ count, searchTerm, items[] }` | Empty string → 400, no results → 404 |
-| **GET** | `/api/products/{id}` | Path: `id` | `Product` | Invalid ID → 404 |
-| **POST** | `/api/products` | `Product` body | `Product` (201 Created) | Invalid model → 400 |
-| **PUT** | `/api/products/{id}` | Path: `id`, `Product` body | 204 No Content | Invalid ID → 404, invalid model → 400 |
-| **DELETE** | `/api/products/{id}` | Path: `id` | 204 No Content | Invalid ID → 404 |
-| **POST** | `/api/products/{id}/rate` | Path: `id`, Body: `rating` (int) | `{ productId, productName, rating, message }` | rating < 1 or > 5 → 400, ID not found → 404 |
-| **POST** | `/api/products/{id}/calculate-discount` | Path: `id`, Body: `quantity` (int) | `{ productId, productName, quantity, unitPrice, originalTotal, discountPercent, discountAmount, finalTotal }` | quantity ≤ 0 → 400, ID not found → 404 |
-| **POST** | `/api/products/{id}/validate-bulk-order` | Path: `id`, Body: `quantity` (int) | `{ isValid, productId, quantity, totalPrice, discountPercent }` or 400 | Invalid product, out of stock, qty 1-1000, ≤50 units |
-| **GET** | `/api/products/inventory-summary` | none | `{ totalProducts, inStockCount, outOfStockCount, inventoryPercentage }` | Basic stats |
-| **PATCH** | `/api/products/{id}/stock` | Path: `id`, Body: `inStock` (bool) | `{ message, ProductId, InStock }` | ID not found → 404 |
-| **GET** | `/api/products/top-rated` | Query: `count?` (default 5) | `{ count, products[], message }` | count 1-100, outside → 400 |
+**[AUTO-UPDATE] .NET endpoints detected:**
+
+- PUT api/products/{id} (Update)
+- DELETE api/products/{id} (Delete)
+
+**[AUTO-UPDATE] .NET endpoints detected:**
+
+- PUT api/products/{id} (Update)
+- DELETE api/products/{id} (Delete)
+
+**[AUTO-UPDATE] .NET endpoints detected:**
+
+- PUT api/products/{id} (Update)
+- DELETE api/products/{id} (Delete)
+
+**[AUTO-UPDATE] .NET endpoints detected:**
+
+- PUT api/products/{id} (Update)
+- DELETE api/products/{id} (Delete)
+
+**[AUTO-UPDATE] .NET endpoints detected:**
+
+- PUT api/products/{id} (Update)
+- DELETE api/products/{id} (Delete)
+
+**[AUTO-UPDATE] .NET endpoints detected:**
+
+- PUT api/products/{id} (Update)
+- DELETE api/products/{id} (Delete)
+
+**[AUTO-UPDATE] .NET endpoints detected:**
+
+- PUT api/products/{id} (Update)
+- DELETE api/products/{id} (Delete)
+
+| Method     | Endpoint                                 | Input                                         | Output                                                                                                        | Edge Cases                                           |
+| ---------- | ---------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| **GET**    | `/api/products`                          | none                                          | `List<Product>`                                                                                               | Empty if no products                                 |
+| **GET**    | `/api/products/in-stock`                 | none                                          | `{ total, items[] }`                                                                                          | Excludes out-of-stock                                |
+| **GET**    | `/api/products/in-stock/count`           | none                                          | `{ count }`                                                                                                   | 0 if all out of stock                                |
+| **GET**    | `/api/products/search/{name}`            | Path: `name`, Query: `minPrice?`, `maxPrice?` | `{ count, searchTerm, items[] }`                                                                              | Empty string → 400, no results → 404                 |
+| **GET**    | `/api/products/{id}`                     | Path: `id`                                    | `Product`                                                                                                     | Invalid ID → 404                                     |
+| **POST**   | `/api/products`                          | `Product` body                                | `Product` (201 Created)                                                                                       | Invalid model → 400                                  |
+| **PUT**    | `/api/products/{id}`                     | Path: `id`, `Product` body                    | 204 No Content                                                                                                | Invalid ID → 404, invalid model → 400                |
+| **DELETE** | `/api/products/{id}`                     | Path: `id`                                    | 204 No Content                                                                                                | Invalid ID → 404                                     |
+| **POST**   | `/api/products/{id}/rate`                | Path: `id`, Body: `rating` (int)              | `{ productId, productName, rating, message }`                                                                 | rating < 1 or > 5 → 400, ID not found → 404          |
+| **POST**   | `/api/products/{id}/calculate-discount`  | Path: `id`, Body: `quantity` (int)            | `{ productId, productName, quantity, unitPrice, originalTotal, discountPercent, discountAmount, finalTotal }` | quantity ≤ 0 → 400, ID not found → 404               |
+| **POST**   | `/api/products/{id}/validate-bulk-order` | Path: `id`, Body: `quantity` (int)            | `{ isValid, productId, quantity, totalPrice, discountPercent }` or 400                                        | Invalid product, out of stock, qty 1-1000, ≤50 units |
+| **GET**    | `/api/products/inventory-summary`        | none                                          | `{ totalProducts, inStockCount, outOfStockCount, inventoryPercentage }`                                       | Basic stats                                          |
+| **PATCH**  | `/api/products/{id}/stock`               | Path: `id`, Body: `inStock` (bool)            | `{ message, ProductId, InStock }`                                                                             | ID not found → 404                                   |
+| **GET**    | `/api/products/top-rated`                | Query: `count?` (default 5)                   | `{ count, products[], message }`                                                                              | count 1-100, outside → 400                           |
 
 **Key Discount Tiers** (Both Java & .NET):
+
 ```
 Quantity >= 50 → 15% discount
 Quantity >= 25 → 10% discount
@@ -291,6 +336,7 @@ Max quantity: 1000
 ```
 
 **Product Schema** (.NET):
+
 ```csharp
 class Product {
     int ProductId;      // auto-assigned
@@ -342,15 +388,15 @@ User Action
 
 ### **Cross-Component Reference** (Java → .NET Data Compatibility)
 
-| Feature | Java | .NET | Compatibility |
-|---------|------|------|----------------|
-| Product ID | `Long` | `int` | ✅ Cast OK |
-| Product Name | `String` | `string` | ✅ Same |
-| Price | `Double` | `double` | ✅ Same |
-| In Stock | `Boolean` | `bool` | ✅ Same |
-| Discount Tiers | 5%, 10%, 15% | 5%, 10%, 15% | ✅ Identical |
-| Max Bulk Qty | 1000 | 1000 | ✅ Identical |
-| Rating Range | 1-5 | 1-5 | ✅ Identical |
+| Feature        | Java         | .NET         | Compatibility |
+| -------------- | ------------ | ------------ | ------------- |
+| Product ID     | `Long`       | `int`        | ✅ Cast OK    |
+| Product Name   | `String`     | `string`     | ✅ Same       |
+| Price          | `Double`     | `double`     | ✅ Same       |
+| In Stock       | `Boolean`    | `bool`       | ✅ Same       |
+| Discount Tiers | 5%, 10%, 15% | 5%, 10%, 15% | ✅ Identical  |
+| Max Bulk Qty   | 1000         | 1000         | ✅ Identical  |
+| Rating Range   | 1-5          | 1-5          | ✅ Identical  |
 
 ---
 
@@ -359,26 +405,29 @@ User Action
 ### **Critical Path Tests** (Must Pass Always)
 
 #### Java Component
-| Scenario | Input | Expected | Validation |
-|----------|-------|----------|-----------|
-| Create product | `{name: "Widget", price: 9.99}` | 201 Created | Response has ProductId |
-| Get product by ID | `GET /api/v1/products/1` | 200 OK | Product exists |
-| Delete with orders | `DELETE /api/v1/products/1` | 400/Exception | Referential integrity maintained |
-| Rate product | `POST /api/v1/products/1/rate` body: `{rating: 5}` | 200 OK | Rating 1-5 only |
-| Bulk order 50 units | `POST /api/v1/orders` qty: 50 | 201 Created | Gets 15% discount |
+
+| Scenario            | Input                                              | Expected      | Validation                       |
+| ------------------- | -------------------------------------------------- | ------------- | -------------------------------- |
+| Create product      | `{name: "Widget", price: 9.99}`                    | 201 Created   | Response has ProductId           |
+| Get product by ID   | `GET /api/v1/products/1`                           | 200 OK        | Product exists                   |
+| Delete with orders  | `DELETE /api/v1/products/1`                        | 400/Exception | Referential integrity maintained |
+| Rate product        | `POST /api/v1/products/1/rate` body: `{rating: 5}` | 200 OK        | Rating 1-5 only                  |
+| Bulk order 50 units | `POST /api/v1/orders` qty: 50                      | 201 Created   | Gets 15% discount                |
 
 #### .NET Component
-| Scenario | Input | Expected | Validation |
-|----------|-------|----------|-----------|
-| Search by name | `GET /api/products/search/Widget?minPrice=5` | 200 OK | Filters applied |
-| Calculate discount | `POST /api/products/1/calculate-discount` qty: 25 | 200 OK + `discountPercent: 10` | Tier correct |
-| Validate bulk order | `POST /api/products/1/validate-bulk-order` qty: 50 | 200 OK + `isValid: true` | Stock + qty validated |
-| Rate product | `POST /api/products/1/rate` rating: 3 | 200 OK | Returns rating |
-| Top rated | `GET /api/products/top-rated?count=10` | 200 OK | count: 10 |
+
+| Scenario            | Input                                              | Expected                       | Validation            |
+| ------------------- | -------------------------------------------------- | ------------------------------ | --------------------- |
+| Search by name      | `GET /api/products/search/Widget?minPrice=5`       | 200 OK                         | Filters applied       |
+| Calculate discount  | `POST /api/products/1/calculate-discount` qty: 25  | 200 OK + `discountPercent: 10` | Tier correct          |
+| Validate bulk order | `POST /api/products/1/validate-bulk-order` qty: 50 | 200 OK + `isValid: true`       | Stock + qty validated |
+| Rate product        | `POST /api/products/1/rate` rating: 3              | 200 OK                         | Returns rating        |
+| Top rated           | `GET /api/products/top-rated?count=10`             | 200 OK                         | count: 10             |
 
 ### **Edge Cases by Category**
 
 #### **Boundary Violations**
+
 ```
 Rating Edge Cases:
   • rating = 0 → 400 "Rating must be between 1 and 5"
@@ -400,6 +449,7 @@ Count Edge Cases (top-rated):
 ```
 
 #### **Data Consistency**
+
 ```
 Product Not Found:
   • GET /api/products/999 → 404 NotFound
@@ -416,6 +466,7 @@ Cross-Component (Java Order → .NET Validate):
 ```
 
 #### **State Mutations**
+
 ```
 Bulk Order Effects:
   1. Validation passes
@@ -437,6 +488,7 @@ Search with Price Filter:
 ```
 
 #### **Referential Integrity**
+
 ```
 Java Constraint: Cannot delete product with orders
   • Product 1 has 5 orders
@@ -451,14 +503,25 @@ Java Constraint: Cannot delete product with orders
 
 ## 🧪 PART 5: Test Generation Strategy
 
+**[AUTO-UPDATE] Feature scenarios detected:**
+
+**Product price validation** (2 scenarios):
+
+- Create product with price exceeding maximum returns 400
+- Create product with price equal to maximum allowed succeeds
+
+**[AUTO-UPDATE] Feature scenarios detected:**
+
 **Review management** (6 scenarios):
+
 - Add a valid review
 - Accept the minimum valid rating
 - Rating summary after multiple reviews
 
 ### **When AI Generates Tests**
 
-**Trigger 1**: Java file changes (*.java)
+**Trigger 1**: Java file changes (\*.java)
+
 ```
 Flow:
 1. collect_diff() detects src/main/java/ProductController.java changed
@@ -471,7 +534,8 @@ Flow:
 8. If fail: Feed back to model for correction
 ```
 
-**Trigger 2**: .NET file changes (*.cs, *.csproj)
+**Trigger 2**: .NET file changes (_.cs, _.csproj)
+
 ```
 Flow:
 1. collect_diff() detects Controllers/ProductController.cs changed
@@ -487,6 +551,7 @@ Flow:
 ### **What to Test Per Component**
 
 #### Java: Gherkin Scenario Template
+
 ```gherkin
 Scenario: Validate bulk order with tiered discount
   Given I have a product with price 10.00 and quantity 50
@@ -497,6 +562,7 @@ Scenario: Validate bulk order with tiered discount
 ```
 
 #### .NET: SpecFlow Scenario Template
+
 ```gherkin
 Scenario: Calculate discount for bulk purchase
   Given I have a product "Widget" with price 10.00
@@ -508,24 +574,24 @@ Scenario: Calculate discount for bulk purchase
 
 ### **Coverage Requirements**
 
-| Component | Critical Paths | Edge Cases | Data Consistency |
-|-----------|-----------------|-----------|-----------------|
-| Java Product | 5+ scenarios | 8+ edge cases | Referential integrity |
-| Java Order | 4+ scenarios | Quantity validation | Cascade checks |
-| .NET Product | 6+ scenarios | Rating (1-5) | Stock status |
-| .NET Discount | 3+ scenarios | Tier thresholds | Price calculations |
+| Component     | Critical Paths | Edge Cases          | Data Consistency      |
+| ------------- | -------------- | ------------------- | --------------------- |
+| Java Product  | 5+ scenarios   | 8+ edge cases       | Referential integrity |
+| Java Order    | 4+ scenarios   | Quantity validation | Cascade checks        |
+| .NET Product  | 6+ scenarios   | Rating (1-5)        | Stock status          |
+| .NET Discount | 3+ scenarios   | Tier thresholds     | Price calculations    |
 
 ---
 
 ## 🔧 PART 6: Known Issues & Workarounds
 
-| Issue | Scope | Workaround | Priority |
-|-------|-------|-----------|----------|
-| .NET has no order deletion constraint | .NET | Manual validation in tests | Low |
-| Possible race condition on concurrent orders | Both | Add distributed lock in production | Medium |
-| Rating doesn't update product avg | Both | Cache invalidation needed | Low |
-| Search is case-insensitive | .NET | Document behavior | Low |
-| Max bulk qty (1000) arbitrary | Both | Make configurable in future | Low |
+| Issue                                        | Scope | Workaround                         | Priority |
+| -------------------------------------------- | ----- | ---------------------------------- | -------- |
+| .NET has no order deletion constraint        | .NET  | Manual validation in tests         | Low      |
+| Possible race condition on concurrent orders | Both  | Add distributed lock in production | Medium   |
+| Rating doesn't update product avg            | Both  | Cache invalidation needed          | Low      |
+| Search is case-insensitive                   | .NET  | Document behavior                  | Low      |
+| Max bulk qty (1000) arbitrary                | Both  | Make configurable in future        | Low      |
 
 ---
 
@@ -534,22 +600,26 @@ Scenario: Calculate discount for bulk purchase
 ### Update Checklist
 
 **If API endpoint added/modified:**
+
 - [ ] Add to PART 2 (API Endpoints & Schemas)
 - [ ] Update request/response schemas
 - [ ] Add new edge cases to PART 4
 - [ ] Update test generation strategy in PART 5
 
 **If service logic changed (discount tiers, validation rules):**
+
 - [ ] Update edge cases in PART 4
 - [ ] Update data flow in PART 3
 - [ ] Verify cross-component compatibility
 
 **If new dependency between services added:**
+
 - [ ] Add to PART 3 (Dependencies & Data Flows)
 - [ ] Document the call chain
 - [ ] Add edge case for failure scenario
 
 **If test generation logic changes:**
+
 - [ ] Update testgen-agent description in PART 5
 - [ ] Add new prompts or validation rules
 - [ ] Document new environment variables
@@ -566,7 +636,7 @@ OPENROUTER_API_KEY: sk-or-...
 TESTGEN_MODEL: anthropic/claude-3.5-sonnet (or openai/gpt-oss-120b:free)
 
 # Optional overrides
-TESTGEN_MODELS: claude-3.5,gpt-4o,gemma-free  # fallback chain
+TESTGEN_MODELS: claude-3.5,gpt-4o,gemma-free # fallback chain
 TESTGEN_MAX_ATTEMPTS: 3
 TESTGEN_MAX_CONTEXT_CHARS: 60000
 ```
@@ -574,11 +644,13 @@ TESTGEN_MAX_CONTEXT_CHARS: 60000
 ### Workflow Triggers
 
 **generate-tests.yml** (Runs testgen-agent):
+
 - Paths: `java-component/**`, `dotnet-component/**`, `**/*.cs`, `**/*.csproj`
 - Branch: develop
 - On: push
 
 **regression.yml** (Runs both test suites):
+
 - Trigger: merge to main/develop
 - Jobs:
   - `mvn -f java-component/pom.xml verify`
@@ -588,18 +660,18 @@ TESTGEN_MAX_CONTEXT_CHARS: 60000
 
 ## 📊 File Reference
 
-| File | Purpose | Last Updated |
-|------|---------|--------------|
-| `java-component/pom.xml` | Maven build config | *On dependency changes* |
-| `java-component/src/main/java/com/example/products/ProductController.java` | Java API | *On endpoint changes* |
-| `dotnet-component/BP.csproj` | .NET main project | *On dependency changes* |
-| `dotnet-component/Controllers/ProductController.cs` | .NET API | *On endpoint changes* |
-| `dotnet-component/Services/ProductService.cs` | .NET business logic | *On rule changes* |
-| `testgen-agent/testgen/nodes.py` | Test generation pipeline | *On logic changes* |
-| `testgen-agent/testgen/prompts.py` | Java prompt templates | *On Java format changes* |
-| `testgen-agent/testgen/dotnet_prompt.py` | .NET prompt templates | *On C# format changes* |
-| `.github/workflows/generate-tests.yml` | Test generation workflow | *On CI changes* |
-| `.github/workflows/regression.yml` | Regression test workflow | *On CI changes* |
+| File                                                                       | Purpose                  | Last Updated             |
+| -------------------------------------------------------------------------- | ------------------------ | ------------------------ |
+| `java-component/pom.xml`                                                   | Maven build config       | _On dependency changes_  |
+| `java-component/src/main/java/com/example/products/ProductController.java` | Java API                 | _On endpoint changes_    |
+| `dotnet-component/BP.csproj`                                               | .NET main project        | _On dependency changes_  |
+| `dotnet-component/Controllers/ProductController.cs`                        | .NET API                 | _On endpoint changes_    |
+| `dotnet-component/Services/ProductService.cs`                              | .NET business logic      | _On rule changes_        |
+| `testgen-agent/testgen/nodes.py`                                           | Test generation pipeline | _On logic changes_       |
+| `testgen-agent/testgen/prompts.py`                                         | Java prompt templates    | _On Java format changes_ |
+| `testgen-agent/testgen/dotnet_prompt.py`                                   | .NET prompt templates    | _On C# format changes_   |
+| `.github/workflows/generate-tests.yml`                                     | Test generation workflow | _On CI changes_          |
+| `.github/workflows/regression.yml`                                         | Regression test workflow | _On CI changes_          |
 
 ---
 
@@ -612,4 +684,4 @@ TESTGEN_MAX_CONTEXT_CHARS: 60000
 5. **Refer to PART 7** - Update this file when code changes
 6. **Check PART 8** - Know the CI/CD environment
 
-*This knowledge base replaces the need to explore the codebase repeatedly.*
+_This knowledge base replaces the need to explore the codebase repeatedly._
