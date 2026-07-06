@@ -41,23 +41,28 @@ MVN = os.environ.get("MAVEN_CMD", "mvn")
 COMPONENT_DIR = os.environ.get("TESTGEN_COMPONENT_DIR", "java-component")
 TEST_TIMEOUT = int(os.environ.get("TESTGEN_TEST_TIMEOUT", "900"))
 
-# Per-section guardrail for very large diffs/sources. ~15K tokens per section —
-# comfortably inside the 131K-token windows of the free models below, but large
-# enough that the full component source + features + step definitions fit.
+# Per-section guardrail for very large diffs/sources.
 MAX_CONTEXT_CHARS = int(os.environ.get("TESTGEN_MAX_CONTEXT_CHARS", "60000"))
 
+# .NET context shaping: changed files first, then high-signal files only.
+DOTNET_MAX_SOURCE_FILES = int(os.environ.get("TESTGEN_DOTNET_MAX_SOURCE_FILES", "24"))
+DOTNET_MAX_FILE_CHARS = int(os.environ.get("TESTGEN_DOTNET_MAX_FILE_CHARS", "8000"))
+DOTNET_MAX_FEATURE_EXAMPLES = int(os.environ.get("TESTGEN_DOTNET_MAX_FEATURE_EXAMPLES", "30000"))
+
 # Per-model retry tuning for transient OpenRouter rate limits.
-MODEL_RETRIES = int(os.environ.get("TESTGEN_MODEL_RETRIES", "6"))
+MODEL_RETRIES = int(os.environ.get("TESTGEN_MODEL_RETRIES", "3"))
 BACKOFF_SCHEDULE = [
     int(v.strip())
-    for v in os.environ.get("TESTGEN_BACKOFF_SECONDS", "8,20,45,90,120,180").split(",")
+    for v in os.environ.get("TESTGEN_BACKOFF_SECONDS", "20,45,90").split(",")
     if v.strip()
 ]
 
-# Free models are shared pools and get rate-limited upstream (429) without warning.
-# Tried in order; on 429/5xx the next model is attempted, so one congested pool
-# doesn't fail the whole run. Override the whole chain with TESTGEN_MODELS
-# (comma-separated) or just the first choice with TESTGEN_MODEL.
+# Stop retry storms quickly when providers are saturated.
+MAX_429_BEFORE_COOLDOWN = int(os.environ.get("TESTGEN_MAX_429_BEFORE_COOLDOWN", "2"))
+RATE_LIMIT_COOLDOWN_SECONDS = int(os.environ.get("TESTGEN_RATE_LIMIT_COOLDOWN_SECONDS", "120"))
+
+# Model selection: use explicit TESTGEN_MODELS when provided, otherwise keep the
+# existing free-pool fallback chain with TESTGEN_MODEL as first preference.
 if os.environ.get("TESTGEN_MODELS"):
     MODELS = [m.strip() for m in os.environ["TESTGEN_MODELS"].split(",") if m.strip()]
 else:
@@ -106,6 +111,52 @@ def _iter_repo_files(repo: Path, pattern: str):
 def _read(path: Path) -> str:
     # errors="replace": a stray non-UTF8 byte in one file shouldn't kill the run.
     return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _truncate_file_text(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + "\n\n// ...truncated for prompt budget...\n"
+
+
+def _dotnet_relevance_score(rel_path: str) -> int:
+    rel = rel_path.lower()
+    score = 0
+    if rel.endswith("program.cs"):
+        score += 120
+    if "controller" in rel or "/controllers/" in rel:
+        score += 100
+    if "service" in rel or "/services/" in rel:
+        score += 80
+    if "/models/" in rel or "dto" in rel:
+        score += 60
+    if rel.endswith("stepdefinitions.cs"):
+        score += 40
+    if rel.endswith(".csproj"):
+        score += 20
+    return score
+
+
+def _select_dotnet_context_files(repo: Path, changed_files: list[str]) -> list[str]:
+    changed_cs = [
+        rel for rel in changed_files
+        if rel.startswith("dotnet-component/") and rel.endswith(CS_SOURCE_EXT)
+    ]
+    all_component_cs = [
+        str(p.relative_to(repo))
+        for p in _iter_repo_files(repo, "*.cs")
+        if str(p.relative_to(repo)).startswith("dotnet-component/")
+    ]
+
+    unchanged_cs = [p for p in all_component_cs if p not in changed_cs]
+    unchanged_cs.sort(key=lambda rel: (_dotnet_relevance_score(rel) * -1, rel))
+
+    selected = list(changed_cs)
+    for rel in unchanged_cs:
+        if len(selected) >= DOTNET_MAX_SOURCE_FILES:
+            break
+        selected.append(rel)
+    return selected
 
 
 def _ref_exists(repo: str, ref: str) -> bool:
@@ -260,36 +311,49 @@ def gather_context(state: TestGenState) -> TestGenState:
                 step_patterns.extend(patterns)
                 sources.append(f"// FILE (step definitions): {rel}\n{text}")
     else:
-        # All .NET source files in the component, with changed ones first.
-        changed_cs = [
+        selected_cs = _select_dotnet_context_files(repo, changed_files)
+        changed_cs_set = {
             rel for rel in changed_files
-            if rel.endswith(CS_SOURCE_EXT)
-        ]
-        other_cs = [
-            str(p.relative_to(repo))
-            for p in _iter_repo_files(repo, "*.cs")
-            if "dotnet-component" in str(p.relative_to(repo)) and str(p.relative_to(repo)) not in changed_cs
-        ]
-        for rel in changed_cs + other_cs:
+            if rel.startswith("dotnet-component/") and rel.endswith(CS_SOURCE_EXT)
+        }
+        for rel in selected_cs:
             path = repo / rel
             if path.is_file():
-                marker = "CHANGED IN THIS DIFF" if rel in changed_cs else "unchanged"
-                sources.append(f"// FILE ({marker}): {rel}\n{_read(path)}")
+                marker = "CHANGED IN THIS DIFF" if rel in changed_cs_set else "unchanged"
+                sources.append(
+                    f"// FILE ({marker}): {rel}\n"
+                    f"{_truncate_file_text(_read(path), DOTNET_MAX_FILE_CHARS)}"
+                )
 
         for cs in _iter_repo_files(repo, "*StepDefinitions.cs"):
             rel = str(cs.relative_to(repo))
+            if not rel.startswith("dotnet-component/Tests/"):
+                continue
             text = _read(cs)
             patterns = extract_step_patterns(text)
             if patterns:
                 step_patterns.extend(patterns)
-            sources.append(f"// FILE (step definitions): {rel}\n{text}")
+            sources.append(
+                f"// FILE (step definitions): {rel}\n"
+                f"{_truncate_file_text(text, DOTNET_MAX_FILE_CHARS)}"
+            )
     if not step_patterns:
         logger.warning("no step definitions found — undefined-step validation disabled")
 
     features: list = []
     for feature in _iter_repo_files(repo, "*.feature"):
-        rel = feature.relative_to(repo)
+        rel = str(feature.relative_to(repo))
+        if project_type == "dotnet" and not rel.startswith("dotnet-component/Tests/Features/"):
+            continue
+        if project_type == "java" and FEATURES_DIR_MARKER not in rel:
+            continue
         features.append(f"# FILE: {rel}\n{_read(feature)}")
+
+    feature_examples = "\n\n".join(features)
+    if project_type == "dotnet":
+        feature_examples = feature_examples[:DOTNET_MAX_FEATURE_EXAMPLES]
+    else:
+        feature_examples = feature_examples[:MAX_CONTEXT_CHARS]
 
     api_spec = ""
     for candidate in ("openapi.yaml", "openapi.yml", "openapi.json", "swagger.yaml", "swagger.json"):
@@ -300,7 +364,7 @@ def gather_context(state: TestGenState) -> TestGenState:
 
     return {
         "target_component_context": "\n\n".join(sources)[:MAX_CONTEXT_CHARS],
-        "existing_feature_examples": "\n\n".join(features)[:MAX_CONTEXT_CHARS],
+        "existing_feature_examples": feature_examples,
         "api_spec": api_spec[:MAX_CONTEXT_CHARS] or "Not available.",
         "ado_work_item_id": ado_work_item_id,
         "ado_work_item_context": ado_work_item_context[:MAX_CONTEXT_CHARS],
@@ -465,13 +529,11 @@ def generate_tests(state: TestGenState) -> TestGenState:
     response_text: Optional[str] = None
     last_error: Optional[Exception] = None
 
-    # Validation-retry diversity: re-asking the same model after it failed
-    # validation tends to reproduce the same misunderstanding. Rotate the chain
-    # so later attempts start from a different model.
-    rotation = state.get("attempts", 0) % len(MODELS)
-    models = MODELS[rotation:] + MODELS[:rotation]
+    models = MODELS
 
     rate_limit_models = set()  # Track which models hit rate limits
+    total_429_hits = 0
+    cooldown_triggered = False
 
     # Outer loop: fall back across models. Inner loop: retry each model with
     # configurable backoff — free-pool 429s can last several minutes.
@@ -496,9 +558,19 @@ def generate_tests(state: TestGenState) -> TestGenState:
                 # false-positive (digits appear in IDs and token counts).
                 status = getattr(e, "status_code", None)
                 if status == 429:
+                    total_429_hits += 1
                     rate_limit_models.add(model)
-                    logger.warning("[%s] RATE LIMIT (429) — all free models may be congested. "
-                                 "Consider setting TESTGEN_MODEL to a paid model or your own key.", model)
+                    logger.warning("[%s] RATE LIMIT (429) — provider is saturated.", model)
+                    if total_429_hits >= MAX_429_BEFORE_COOLDOWN:
+                        logger.warning(
+                            "429 threshold reached (%d). Cooling down for %ds to avoid retry storms.",
+                            total_429_hits,
+                            RATE_LIMIT_COOLDOWN_SECONDS,
+                        )
+                        time.sleep(RATE_LIMIT_COOLDOWN_SECONDS)
+                        cooldown_triggered = True
+                        retries_left = 0
+                        break
                 else:
                     logger.warning("[%s] failed (status=%s): %s", model, status, e)
                 
@@ -516,21 +588,22 @@ def generate_tests(state: TestGenState) -> TestGenState:
                         sleep_time = BACKOFF_SCHEDULE[retry_index]
                     logger.info("Retrying in %ds... (retries_left=%d)", sleep_time, retries_left)
                     time.sleep(sleep_time)
+        if cooldown_triggered:
+            break
         if response_text is not None:
             break
 
     if response_text is None:
         rate_limited_msg = ""
         if rate_limit_models:
-            rate_limited_msg = (f"\n\n⚠️  RATE LIMIT ISSUE: All free models ({', '.join(rate_limit_models)}) "
-                              f"are rate-limited.\n"
-                              f"Solutions:\n"
-                              f"  1. Set your own OpenRouter API key:\n"
-                              f"     export OPENROUTER_API_KEY=sk-or-...\n"
-                              f"  2. Use a paid model:\n"
-                              f"     export TESTGEN_MODEL='anthropic/claude-3.5-sonnet'\n"
-                              f"  3. Get free credits: https://openrouter.ai\n"
-                              f"  4. Wait 30+ minutes and retry (rate limits reset)")
+            rate_limited_msg = (
+                f"\n\n⚠️  RATE LIMIT ISSUE: models hit 429 ({', '.join(rate_limit_models)}).\n"
+                f"This run uses early cooldown to avoid hammering the provider.\n"
+                f"Recommended:\n"
+                f"  1. Configure a stronger single model via TESTGEN_MODEL\n"
+                f"  2. Use a funded OpenRouter key\n"
+                f"  3. Retry after provider cooldown"
+            )
         raise RuntimeError(
             f"All models exhausted ({', '.join(MODELS)}). Last error: {last_error}{rate_limited_msg}"
         )

@@ -68,8 +68,10 @@ jobs:
           AZDO_PROJECT: ${{ secrets.AZDO_PROJECT }}
           AZDO_PAT: ${{ secrets.AZDO_PAT }}
           AZDO_WORK_ITEM_ID: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ado_work_item_id || '' }}
-          TESTGEN_MODEL_RETRIES: "6"
-          TESTGEN_BACKOFF_SECONDS: "8,20,45,90,120,180"
+          TESTGEN_MODEL_RETRIES: "3"
+          TESTGEN_BACKOFF_SECONDS: "20,45,90"
+          TESTGEN_MAX_429_BEFORE_COOLDOWN: "2"
+          TESTGEN_RATE_LIMIT_COOLDOWN_SECONDS: "120"
         run: |
           git config user.name "testgen-agent"
           git config user.email "testgen-agent@users.noreply.github.com"

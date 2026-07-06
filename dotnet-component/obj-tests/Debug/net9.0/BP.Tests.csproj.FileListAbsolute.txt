@@ -445,3 +445,16 @@ c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Deb
 c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\obj-tests\Debug\net9.0\MvcTestingAppManifest.json
 c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\obj-tests\project.assets.json
 c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\specflow.json
+c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\appsettings.Development.json
+c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\appsettings.json
+c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\BP.deps.json
+c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\BP.runtimeconfig.json
+c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\BP.staticwebassets.endpoints.json
+c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\BP.Tests.deps.json
+c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\BP.Tests.runtimeconfig.json
+c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\MvcTestingAppManifest.json
+c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\obj-tests\BP.Tests.csproj.nuget.dgspec.json
+c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\obj-tests\Debug\net9.0\BP.Tests.sourcelink.json
+c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\obj-tests\Debug\net9.0\MvcTestingAppManifest.json
+c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\obj-tests\project.assets.json
+c:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\bin-tests\Debug\net9.0\specflow.json
