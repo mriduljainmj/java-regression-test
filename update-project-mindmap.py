@@ -390,8 +390,13 @@ def main():
         except subprocess.CalledProcessError as e:
             print(f"❌ Commit failed: {e}")
             return 1
-    
-    return 0 if updated else 1
+
+    if not updated:
+        # No controller/service/feature change to document (e.g. a .csproj-only or
+        # config-only change). That is a normal no-op, not a failure — exit 0 so
+        # the workflow doesn't go red.
+        print("ℹ️  Nothing to update in PROJECT.md — skipping.")
+    return 0
 
 
 if __name__ == "__main__":
