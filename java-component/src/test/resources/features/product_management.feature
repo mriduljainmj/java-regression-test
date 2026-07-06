@@ -33,7 +33,7 @@ Feature: Product management
       |        | 9.99       | name must not be blank                  |
       | Laptop | 0          | price must be greater than zero         |
       | Laptop | -5.00      | price must be greater than zero         |
-      | Laptop | 100001.00  | price must not exceed 100000.00         |
+      | Laptop | 300001.00  | price must not exceed 300000.00         |
 
   Scenario: Retrieve a product that does not exist
     When a client requests the product with id 9999
@@ -56,7 +56,7 @@ Feature: Product management
       | 1  |        | 9.99       | name must not be blank                  |
       | 1  | Laptop | 0          | price must be greater than zero         |
       | 1  | Laptop | -5.00      | price must be greater than zero         |
-      | 1  | Laptop | 100001.00  | price must not exceed 100000.00         |
+      | 1  | Laptop | 300001.00  | price must not exceed 300000.00         |
 
   Scenario: Delete an existing product
     Given a product exists with name "Laptop" and price 999.99
