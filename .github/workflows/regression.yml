@@ -50,13 +50,17 @@ jobs:
           echo "=========================================="
           if [ -f dotnet-component/BP.csproj ]; then
             cd dotnet-component
+
+            echo "Cleaning stale build artifacts to avoid nested output-path pollution..."
+            rm -rf bin obj bin-tests obj-tests TestResults
+
             dotnet test BP.Tests.csproj --nologo --verbosity minimal --results-directory TestResults --logger "trx;LogFileName=dotnet-tests.trx"
             TEST_RESULT=$?
 
             # Generate a readable BDD HTML report (SpecFlow LivingDoc)
             export PATH="$PATH:$HOME/.dotnet/tools"
-            dotnet tool update --global SpecFlow.Plus.LivingDoc.CLI --version 3.*
-            livingdoc test-assembly bin-tests/Debug/net9.0/BP.Tests.dll -t TestResults/dotnet-tests.trx -o TestResults/dotnet-livingdoc.html || true
+            dotnet tool update --global SpecFlow.Plus.LivingDoc.CLI --version 3.* || true
+            "$HOME/.dotnet/tools/livingdoc" test-assembly bin-tests/Debug/net9.0/BP.Tests.dll -t TestResults/dotnet-tests.trx -o TestResults/dotnet-livingdoc.html || true
 
             cd ..
 

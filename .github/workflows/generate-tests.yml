@@ -59,6 +59,12 @@ jobs:
       - name: Install agent dependencies
         run: pip install -r testgen-agent/requirements.txt
 
+      - name: Clean .NET build artifacts
+        run: |
+          if [ -d dotnet-component ]; then
+            rm -rf dotnet-component/bin dotnet-component/obj dotnet-component/bin-tests dotnet-component/obj-tests dotnet-component/TestResults
+          fi
+
       - name: Generate Cucumber tests and open PR
         working-directory: testgen-agent
         env:
