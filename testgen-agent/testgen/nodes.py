@@ -67,10 +67,6 @@ BACKOFF_SCHEDULE = [
     if v.strip()
 ]
 
-# Stop retry storms quickly when providers are saturated.
-MAX_429_BEFORE_COOLDOWN = int(os.environ.get("TESTGEN_MAX_429_BEFORE_COOLDOWN", "2"))
-RATE_LIMIT_COOLDOWN_SECONDS = int(os.environ.get("TESTGEN_RATE_LIMIT_COOLDOWN_SECONDS", "120"))
-
 # Model selection: use explicit TESTGEN_MODELS when provided, otherwise keep the
 # existing free-pool fallback chain with TESTGEN_MODEL as first preference.
 if os.environ.get("TESTGEN_MODELS"):
@@ -553,17 +549,18 @@ def generate_tests(state: TestGenState) -> TestGenState:
     response_text: Optional[str] = None
     last_error: Optional[Exception] = None
 
-    models = MODELS
+    rate_limit_models = set()  # models that returned 429 at least once
+    dead_models = set()        # 400/404 — unusable shape/removed, drop from rotation
 
-    rate_limit_models = set()  # Track which models hit rate limits
-    total_429_hits = 0
-    cooldown_triggered = False
-
-    # Outer loop: fall back across models. Inner loop: retry each model with
-    # configurable backoff — free-pool 429s can last several minutes.
-    for model in models:
-        retries_left = MODEL_RETRIES
-        while retries_left > 0 and response_text is None:
+    # Try EVERY model each round before sleeping: a 429 on one model must fall
+    # straight through to the next, not abort the run. Only when a whole pass over
+    # all models finds nothing usable do we back off and retry the set — up to
+    # MODEL_RETRIES rounds.
+    for round_index in range(MODEL_RETRIES):
+        saw_transient = False
+        for model in MODELS:
+            if model in dead_models:
+                continue
             try:
                 response = client.chat.completions.create(
                     model=model,
@@ -574,59 +571,49 @@ def generate_tests(state: TestGenState) -> TestGenState:
                 if not content or not content.strip():
                     raise ValueError("model returned an empty response")
                 response_text = content
+                rate_limit_models.discard(model)  # clear if it recovered
                 logger.info("Generated with model %s", model)
-                rate_limit_models.discard(model)  # Clear rate limit if successful
+                break
             except Exception as e:
                 last_error = e
                 # Typed status from the SDK; substring checks on str(e) can
                 # false-positive (digits appear in IDs and token counts).
                 status = getattr(e, "status_code", None)
-                if status == 429:
-                    total_429_hits += 1
-                    rate_limit_models.add(model)
-                    logger.warning("[%s] RATE LIMIT (429) — provider is saturated.", model)
-                    if total_429_hits >= MAX_429_BEFORE_COOLDOWN:
-                        logger.warning(
-                            "429 threshold reached (%d). Cooling down for %ds to avoid retry storms.",
-                            total_429_hits,
-                            RATE_LIMIT_COOLDOWN_SECONDS,
-                        )
-                        time.sleep(RATE_LIMIT_COOLDOWN_SECONDS)
-                        cooldown_triggered = True
-                        retries_left = 0
-                        break
-                else:
-                    logger.warning("[%s] failed (status=%s): %s", model, status, e)
-                
                 if status == 402:
                     raise RuntimeError("OpenRouter billing required") from e
                 if status in (400, 404):
-                    break  # bad request shape or model removed — next model
-                
-                retries_left -= 1
-                if retries_left > 0:
-                    retry_index = max(0, MODEL_RETRIES - retries_left - 1)
-                    if retry_index >= len(BACKOFF_SCHEDULE):
-                        sleep_time = BACKOFF_SCHEDULE[-1]
-                    else:
-                        sleep_time = BACKOFF_SCHEDULE[retry_index]
-                    logger.info("Retrying in %ds... (retries_left=%d)", sleep_time, retries_left)
-                    time.sleep(sleep_time)
-        if cooldown_triggered:
-            break
+                    logger.warning("[%s] unusable (status=%s) — dropping from rotation", model, status)
+                    dead_models.add(model)
+                    continue
+                if status == 429:
+                    rate_limit_models.add(model)
+                    logger.warning("[%s] rate limited (429) — falling through to next model", model)
+                else:
+                    logger.warning("[%s] failed (status=%s): %s", model, status, e)
+                saw_transient = True
+                continue
+
         if response_text is not None:
             break
+        if not saw_transient:
+            break  # every model returned a hard 4xx — backing off won't help
+        if round_index < MODEL_RETRIES - 1:
+            sleep_time = BACKOFF_SCHEDULE[min(round_index, len(BACKOFF_SCHEDULE) - 1)]
+            logger.info(
+                "All models unavailable this pass; backing off %ds before round %d/%d",
+                sleep_time, round_index + 2, MODEL_RETRIES,
+            )
+            time.sleep(sleep_time)
 
     if response_text is None:
         rate_limited_msg = ""
         if rate_limit_models:
             rate_limited_msg = (
-                f"\n\n⚠️  RATE LIMIT ISSUE: models hit 429 ({', '.join(rate_limit_models)}).\n"
-                f"This run uses early cooldown to avoid hammering the provider.\n"
-                f"Recommended:\n"
-                f"  1. Configure a stronger single model via TESTGEN_MODEL\n"
-                f"  2. Use a funded OpenRouter key\n"
-                f"  3. Retry after provider cooldown"
+                f"\n\n⚠️  RATE LIMIT: these models returned 429 ({', '.join(sorted(rate_limit_models))}).\n"
+                f"The free OpenRouter pool is saturated. Options:\n"
+                f"  1. Set TESTGEN_MODEL to a funded/stronger model\n"
+                f"  2. Use a funded OpenRouter key (https://openrouter.ai/settings/integrations)\n"
+                f"  3. Re-run the workflow after the provider cools down"
             )
         raise RuntimeError(
             f"All models exhausted ({', '.join(MODELS)}). Last error: {last_error}{rate_limited_msg}"
