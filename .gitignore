@@ -5,6 +5,8 @@ target/
 # .NET / SpecFlow
 bin/
 obj/
+bin-tests/
+obj-tests/
 *.csproj.user
 *.feature.cs
 *.feature.feature.cs
