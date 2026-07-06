@@ -651,25 +651,6 @@ def generate_tests(state: TestGenState) -> TestGenState:
     return {"generation": generation, "attempts": attempts, "validation_errors": []}
 
 
-def _infer_project_type_from_generation(generation: GenerationResult) -> str | None:
-    for glue in generation.new_or_modified_step_definitions:
-        if glue.file_name.endswith(".cs") or FEATURES_DIR_MARKER_DOTNET in glue.file_name:
-            return "dotnet"
-        if glue.file_name.endswith(".java") or FEATURES_DIR_MARKER in glue.file_name:
-            return "java"
-    for feature in generation.new_or_modified_features:
-        # Check for correct dotnet path first
-        if FEATURES_DIR_MARKER_DOTNET in feature.file_name:
-            return "dotnet"
-        # If feature is under dotnet-component/ but with wrong path, still dotnet
-        if feature.file_name.startswith("dotnet-component/") and feature.file_name.endswith(".feature"):
-            return "dotnet"
-        # Check for java path
-        if FEATURES_DIR_MARKER in feature.file_name:
-            return "java"
-    return None
-
-
 def validate_output(state: TestGenState) -> TestGenState:
     """Validate generated Gherkin (structure, paths, CREATE/UPDATE consistency,
     and that every step matches an existing step definition)."""
@@ -797,26 +778,23 @@ def validate_output(state: TestGenState) -> TestGenState:
         if not name.endswith(".feature"):
             errors.append(f"{name}: file name must end with .feature")
         
-        # Feature path validation: classify by path first to avoid false project-type mismatches.
-        is_dotnet_feature_path = name.startswith("dotnet-component/") or "dotnet-component/Tests/Features" in name
-        is_java_feature_path = "src/test/resources/features" in name
-
-        if is_dotnet_feature_path:
+        # Enforce the detected project_type: a run must NOT emit paths for the
+        # other component. This is what stopped a .NET change from producing a
+        # java-component feature (and then running mvn) in earlier runs.
+        if project_type == "dotnet":
             if "dotnet-component/Tests/Features" not in name:
                 errors.append(
-                    f"{name}: .NET feature files MUST be under dotnet-component/Tests/Features/ "
-                    f"not under {name.split('/')[0]}/. Use path: dotnet-component/Tests/Features/{name.split('/')[-1]}"
+                    f"{name}: this is a .NET run — feature files MUST be under "
+                    f"dotnet-component/Tests/Features/. Do NOT write to java-component/ "
+                    f"or any other project. Regenerate at "
+                    f"dotnet-component/Tests/Features/{name.split('/')[-1]}"
                 )
-        elif is_java_feature_path:
-            # Java path is valid; no additional checks needed.
-            pass
-        elif project_type == "dotnet":
-            errors.append(
-                f"{name}: .NET feature files MUST be under dotnet-component/Tests/Features/. "
-                f"Use path: dotnet-component/Tests/Features/{name.split('/')[-1]}"
-            )
-        else:
-            errors.append(f"{name}: Java features must live under src/test/resources/features/")
+        else:  # java
+            if FEATURES_DIR_MARKER not in name:
+                errors.append(
+                    f"{name}: this is a Java run — features must live under "
+                    f"src/test/resources/features/ (not under dotnet-component/)."
+                )
         
         if not target.is_relative_to(repo):
             errors.append(f"{name}: path escapes the repository root")

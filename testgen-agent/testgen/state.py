@@ -68,6 +68,7 @@ class TestGenState(TypedDict, total=False):
     ado_work_item_id: str
     ado_work_item_context: str
     resolved_base: str
+    project_type: str  # "java" | "dotnet" — detected in collect_diff, must persist end-to-end
 
     # Gathered context
     git_diff: str
