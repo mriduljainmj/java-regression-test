@@ -27,6 +27,14 @@ from .state import FeatureFile, GenerationResult, StepDefinitionFile, TestGenSta
 
 logger = logging.getLogger(__name__)
 
+_FORCED_PROJECT_TYPE = os.environ.get("TESTGEN_FORCE_PROJECT_TYPE", "").strip().lower()
+if _FORCED_PROJECT_TYPE and _FORCED_PROJECT_TYPE not in {"java", "dotnet"}:
+    logger.warning(
+        "Ignoring invalid TESTGEN_FORCE_PROJECT_TYPE=%r (expected 'java' or 'dotnet')",
+        _FORCED_PROJECT_TYPE,
+    )
+    _FORCED_PROJECT_TYPE = ""
+
 # Safety cap on total model calls (structural retries + rotation). Set high
 # enough that the execution-feedback rounds below never trip it.
 # Increased to 12 for C# syntax correction retries (6 is insufficient for @Given → [Given] fixes)
@@ -202,11 +210,25 @@ def collect_diff(state: TestGenState) -> TestGenState:
     java_changes = [f for f in changed_files if JAVA_SOURCE_MARKER in f and f.endswith(".java")]
     cs_changes = [f for f in changed_files if f.endswith(CS_SOURCE_EXT) or f.endswith(".csproj")]
 
-    project_type = None
-    if cs_changes:
-        project_type = "dotnet"
-    elif java_changes:
-        project_type = "java"
+    if _FORCED_PROJECT_TYPE:
+        project_type = _FORCED_PROJECT_TYPE
+    else:
+        project_type = None
+        if cs_changes:
+            project_type = "dotnet"
+        elif java_changes:
+            project_type = "java"
+
+    logger.info(
+        "Change detection summary: total=%d, java=%d, dotnet=%d, selected=%s, forced=%s",
+        len(changed_files),
+        len(java_changes),
+        len(cs_changes),
+        project_type or "none",
+        _FORCED_PROJECT_TYPE or "none",
+    )
+    if changed_files:
+        logger.info("Changed files (first 25): %s", ", ".join(changed_files[:25]))
 
     update: TestGenState = {"git_diff": diff, "changed_files": changed_files, "resolved_base": base}
     if project_type is None:

@@ -79,6 +79,17 @@ jobs:
           TESTGEN_MAX_429_BEFORE_COOLDOWN: "2"
           TESTGEN_RATE_LIMIT_COOLDOWN_SECONDS: "120"
         run: |
+          CHANGED_FILES="$(git show --name-only --pretty="" "${GITHUB_SHA}")"
+          if echo "$CHANGED_FILES" | grep -E '\.cs$|\.csproj$' >/dev/null 2>&1; then
+            export TESTGEN_FORCE_PROJECT_TYPE=dotnet
+            echo "Routing override: TESTGEN_FORCE_PROJECT_TYPE=dotnet"
+          elif echo "$CHANGED_FILES" | grep -E 'src/main/java/.*\.java$' >/dev/null 2>&1; then
+            export TESTGEN_FORCE_PROJECT_TYPE=java
+            echo "Routing override: TESTGEN_FORCE_PROJECT_TYPE=java"
+          else
+            echo "No routing override inferred from HEAD changed files"
+          fi
+
           git config user.name "testgen-agent"
           git config user.email "testgen-agent@users.noreply.github.com"
           python main.py \
