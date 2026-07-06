@@ -10,6 +10,8 @@ obj-tests/
 *.csproj.user
 *.feature.cs
 *.feature.feature.cs
+TestResults/
+*.trx
 
 # Python
 __pycache__/
@@ -20,7 +22,9 @@ venv/
 # IDE
 .idea/
 .vscode/
+.vs/
 *.iml
+*.suo
 
 # OS
 .DS_Store

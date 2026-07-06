@@ -1,5 +1,6 @@
-# Step 2 of the flow: after the (manually reviewed) test PR merges to main,
-# run the full Cucumber regression suite against the current code.
+# Step 2 of the flow: after the (manually reviewed) test PR merges, run the
+# regression suite for the component that changed — Java (mvn verify) and/or
+# .NET (dotnet test). A paths filter runs only the suite(s) actually affected.
 name: Cucumber regression
 
 on:
@@ -18,63 +19,69 @@ on:
       - "**/*.cs"
       - "**/*.csproj"
 
+concurrency:
+  group: regression-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   regression:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      # Decide which component(s) changed so we only run the relevant suite.
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            java:
+              - 'java-component/**'
+            dotnet:
+              - 'dotnet-component/**'
+              - '**/*.cs'
+              - '**/*.csproj'
+
+      - if: steps.changes.outputs.java == 'true'
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
           cache: maven
 
-      - uses: actions/setup-dotnet@v3
+      - if: steps.changes.outputs.dotnet == 'true'
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: "9.0.x"
 
       - name: Run Java regression suite
-        run: |
-          echo "Running Java regression tests..."
-          if [ -f java-component/pom.xml ]; then
-            mvn -f java-component/pom.xml --batch-mode verify
-          else
-            echo "No Java test project found (java-component/pom.xml)"
-          fi
+        if: steps.changes.outputs.java == 'true'
+        run: mvn -f java-component/pom.xml --batch-mode verify
 
       - name: Run .NET regression suite
+        if: steps.changes.outputs.dotnet == 'true'
+        working-directory: dotnet-component
         run: |
-          echo "=========================================="
-          echo "Running .NET regression tests..."
-          echo "=========================================="
-          if [ -f dotnet-component/BP.csproj ]; then
-            cd dotnet-component
+          echo "Cleaning stale build artifacts to avoid nested output-path pollution..."
+          rm -rf bin obj bin-tests obj-tests TestResults
 
-            echo "Cleaning stale build artifacts to avoid nested output-path pollution..."
-            rm -rf bin obj bin-tests obj-tests TestResults
+          dotnet test BP.Tests.csproj --nologo --verbosity minimal \
+            --results-directory TestResults --logger "trx;LogFileName=dotnet-tests.trx"
+          TEST_RESULT=$?
 
-            dotnet test BP.Tests.csproj --nologo --verbosity minimal --results-directory TestResults --logger "trx;LogFileName=dotnet-tests.trx"
-            TEST_RESULT=$?
+          # Optional readable BDD report (SpecFlow LivingDoc) — best effort.
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet tool update --global SpecFlow.Plus.LivingDoc.CLI --version 3.* || true
+          "$HOME/.dotnet/tools/livingdoc" test-assembly bin-tests/Debug/net9.0/BP.Tests.dll \
+            -t TestResults/dotnet-tests.trx -o TestResults/dotnet-livingdoc.html || true
 
-            # Generate a readable BDD HTML report (SpecFlow LivingDoc)
-            export PATH="$PATH:$HOME/.dotnet/tools"
-            dotnet tool update --global SpecFlow.Plus.LivingDoc.CLI --version 3.* || true
-            "$HOME/.dotnet/tools/livingdoc" test-assembly bin-tests/Debug/net9.0/BP.Tests.dll -t TestResults/dotnet-tests.trx -o TestResults/dotnet-livingdoc.html || true
-
-            cd ..
-
-            if [ $TEST_RESULT -ne 0 ]; then
-              echo "❌ .NET tests failed"
-              exit $TEST_RESULT
-            fi
-            echo "✓ .NET tests passed"
-          else
-            echo "No .NET project found (dotnet-component/BP.csproj)"
+          if [ $TEST_RESULT -ne 0 ]; then
+            echo "::error::.NET tests failed"
+            exit $TEST_RESULT
           fi
+          echo ".NET tests passed"
 
       - name: Upload Cucumber report (Java)
-        if: always()
+        if: always() && steps.changes.outputs.java == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: cucumber-report-java
@@ -82,7 +89,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload .NET test results (TRX)
-        if: always()
+        if: always() && steps.changes.outputs.dotnet == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: dotnet-test-results
@@ -90,7 +97,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload .NET BDD report (LivingDoc HTML)
-        if: always()
+        if: always() && steps.changes.outputs.dotnet == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: cucumber-report-dotnet
