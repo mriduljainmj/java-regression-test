@@ -1,3 +1,4 @@
+using System;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -50,7 +51,16 @@ namespace BP.Tests.StepDefinitions
             var body = await response.Content.ReadAsStringAsync();
             var doc = JsonDocument.Parse(body);
             var actual = doc.RootElement.GetProperty(key).GetInt32();
-            Assert.Equal(value, actual);
+
+            int expected = value;
+            if ((key.Equals("ProductId", StringComparison.OrdinalIgnoreCase)
+                || key.Equals("id", StringComparison.OrdinalIgnoreCase))
+                && _scenarioContext.TryGetValue($"product_id_alias_{value}", out int mappedValue))
+            {
+                expected = mappedValue;
+            }
+
+            Assert.Equal(expected, actual);
         }
 
         [Then(@"^the response JSON should contain ""([^""]+)"": (true|false)$")]

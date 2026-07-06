@@ -1,0 +1,279 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="5029ce0f-5229-444f-b3e9-2d3d60943c92" name="ManshuBatra@IN-MANSHU-BATRA 2026-07-06 13:29:46" runUser="AzureAD\ManshuBatra" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-07-06T13:29:46.0265270+05:30" queuing="2026-07-06T13:29:46.0265276+05:30" start="2026-07-06T13:29:44.5012093+05:30" finish="2026-07-06T13:29:46.2187262+05:30" />
+  <TestSettings name="default" id="c6af235e-977f-4e20-bd7f-b1e8c8a2bb50">
+    <Deployment runDeploymentRoot="ManshuBatra_IN-MANSHU-BATRA_2026-07-06_13_29_46" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="bc1da935-227d-4575-8da4-38b276aa9aca" testId="7639f172-a149-8e6b-9e5f-e96b673e44a7" testName="Get created product by id" computerName="IN-MANSHU-BATRA" duration="00:00:00.0500225" startTime="2026-07-06T13:29:45.6684494+05:30" endTime="2026-07-06T13:29:45.6684497+05:30" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="bc1da935-227d-4575-8da4-38b276aa9aca">
+      <Output>
+        <StdOut>Given a product exists with id 1&#xD;
+-&gt; done: ProductManagementStepDefinitions.GivenAProductExistsWithId(1) (0.0s)&#xD;
+When a client requests GET /api/products/1&#xD;
+-&gt; done: ProductManagementStepDefinitions.WhenAClientRequestsGetApiProductsById(1) (0.0s)&#xD;
+Then the response status should be 200&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseStatusShouldBe(200) (0.0s)&#xD;
+And the response JSON should contain "ProductId": 1&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseJsonShouldContainIntField("ProductId", 1) (0.0s)</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="955ed82b-4405-47e4-90a6-f8e8e8b911d3" testId="3649ac34-96e0-2e91-8e2b-670962608f59" testName="Delete a product" computerName="IN-MANSHU-BATRA" duration="00:00:00.0340902" startTime="2026-07-06T13:29:45.7635547+05:30" endTime="2026-07-06T13:29:45.7635549+05:30" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="955ed82b-4405-47e4-90a6-f8e8e8b911d3">
+      <Output>
+        <StdOut>Given a product exists with id 2&#xD;
+-&gt; done: ProductManagementStepDefinitions.GivenAProductExistsWithId(2) (0.0s)&#xD;
+When a client DELETEs /api/products/2&#xD;
+-&gt; done: ProductManagementStepDefinitions.WhenAClientDeletesApiProducts(2) (0.0s)&#xD;
+Then the response status should be 204&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseStatusShouldBe(204) (0.0s)</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="9ead2bed-5f17-4522-83c4-17b79c46683e" testId="a0f5889c-615e-d815-113c-b36cea98c4da" testName="Get non-existent product returns 404 and message" computerName="IN-MANSHU-BATRA" duration="00:00:00.0387401" startTime="2026-07-06T13:29:45.9442557+05:30" endTime="2026-07-06T13:29:45.9442559+05:30" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="9ead2bed-5f17-4522-83c4-17b79c46683e">
+      <Output>
+        <StdOut>When a client requests GET /api/products/9999&#xD;
+-&gt; done: ProductManagementStepDefinitions.WhenAClientRequestsGetApiProductsById(9999) (0.0s)&#xD;
+Then the response status should be 404&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseStatusShouldBe(404) (0.0s)&#xD;
+And the response JSON should contain message "Product with ID 9999 was not found."&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseJsonShouldContainMessage("Product with ID 9...") (0.0s)</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="b4eee169-4b10-4461-93fc-71b94622eb49" testId="d52199c5-cabd-0eaa-8e5c-150dfebafd7d" testName="Get weather forecasts returns five items" computerName="IN-MANSHU-BATRA" duration="00:00:00.0392754" startTime="2026-07-06T13:29:45.9873182+05:30" endTime="2026-07-06T13:29:45.9873183+05:30" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b4eee169-4b10-4461-93fc-71b94622eb49">
+      <Output>
+        <StdOut>When a client requests GET /WeatherForecast&#xD;
+-&gt; done: WeatherForecastStepDefinitions.WhenAClientRequestsGetWeatherForecast() (0.0s)&#xD;
+Then the response status should be 200&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseStatusShouldBe(200) (0.0s)&#xD;
+And the response JSON array length should be 5&#xD;
+-&gt; done: WeatherForecastStepDefinitions.ThenTheResponseJsonArrayLengthShouldBe(5) (0.0s)&#xD;
+And each item should contain fields "Date", "TemperatureC", "Summary"&#xD;
+-&gt; done: WeatherForecastStepDefinitions.ThenEachItemShouldContainFields(""Date", "Temperat...") (0.0s)</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="c4c73be4-bee0-4089-9f70-33fe69d2fdeb" testId="8bd407ad-775a-01fb-89fd-7ddccfea005b" testName="Get existing user by id" computerName="IN-MANSHU-BATRA" duration="00:00:00.0370574" startTime="2026-07-06T13:29:46.0565981+05:30" endTime="2026-07-06T13:29:46.0565983+05:30" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="c4c73be4-bee0-4089-9f70-33fe69d2fdeb">
+      <Output>
+        <StdOut>Given a user exists with id 1&#xD;
+-&gt; done: UserManagementStepDefinitions.GivenAUserExistsWithId(1) (0.0s)&#xD;
+When a client requests GET /api/GetUserById with userId 1&#xD;
+-&gt; done: UserManagementStepDefinitions.WhenAClientRequestsGetApiGetUserByIdWithUserId(1) (0.0s)&#xD;
+Then the response status should be 200&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseStatusShouldBe(200) (0.0s)&#xD;
+And the response JSON should contain "UserId": 1&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseJsonShouldContainIntField("UserId", 1) (0.0s)&#xD;
+And the response JSON should contain "Name": "Alice Johnson"&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseJsonShouldContainStringField("Name", "Alice Johnson") (0.0s)</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="a6bf7780-0f1c-462a-bb74-9fb839271925" testId="1bdbc4b6-8d76-fff4-47a5-abfc1f48de67" testName="Update existing product" computerName="IN-MANSHU-BATRA" duration="00:00:00.0233470" startTime="2026-07-06T13:29:45.8684376+05:30" endTime="2026-07-06T13:29:45.8684378+05:30" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a6bf7780-0f1c-462a-bb74-9fb839271925">
+      <Output>
+        <StdOut>Given a product exists with id 1&#xD;
+-&gt; done: ProductManagementStepDefinitions.GivenAProductExistsWithId(1) (0.0s)&#xD;
+When a client PUTs /api/products/1 with body&#xD;
+  --- multiline step argument ---&#xD;
+  { "Name": "Widget Updated", "Price": 11.0, "InStock": false }&#xD;
+-&gt; done: ProductManagementStepDefinitions.WhenAClientPutsApiProductsWithBody(1, "{ "Name": "Widget...") (0.0s)&#xD;
+Then the response status should be 204&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseStatusShouldBe(204) (0.0s)</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="6afb4655-2932-4056-b6f3-d556ffdfab9b" testId="eaf2592b-238b-4491-84b6-159da7aa8384" testName="Create a valid product" computerName="IN-MANSHU-BATRA" duration="00:00:00.0608504" startTime="2026-07-06T13:29:45.7293604+05:30" endTime="2026-07-06T13:29:45.7293608+05:30" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="6afb4655-2932-4056-b6f3-d556ffdfab9b">
+      <Output>
+        <StdOut>When a client POSTs /api/products with body&#xD;
+  --- multiline step argument ---&#xD;
+  { "Name": "New Thing", "Price": 12.5, "InStock": true }&#xD;
+-&gt; done: ProductManagementStepDefinitions.WhenAClientPOSTsApiProductsWithBody("{ "Name": "New Th...") (0.0s)&#xD;
+Then the response status should be 201&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseStatusShouldBe(201) (0.0s)&#xD;
+And the response JSON should contain "Name": "New Thing"&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseJsonShouldContainStringField("Name", "New Thing") (0.0s)</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="7fe4dc75-3d8f-49c6-9fd4-8981a3cb775b" testId="c6c53ce3-8cd5-eb56-7fa0-ce9b885d5d77" testName="Count is zero when no products exist" computerName="IN-MANSHU-BATRA" duration="00:00:00.0354203" startTime="2026-07-06T13:29:46.1473798+05:30" endTime="2026-07-06T13:29:46.1473799+05:30" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="7fe4dc75-3d8f-49c6-9fd4-8981a3cb775b">
+      <Output>
+        <StdOut>Given the product catalog is empty&#xD;
+-&gt; done: ProductManagementStepDefinitions.GivenTheProductCatalogIsEmpty() (0.0s)&#xD;
+When a client requests GET /api/products/in-stock-count&#xD;
+-&gt; done: ProductManagementStepDefinitions.WhenAClientRequestsGetApiProductsInStockCount() (0.0s)&#xD;
+Then the response status should be 200&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseStatusShouldBe(200) (0.0s)&#xD;
+And the response JSON should contain "count": 0&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseJsonShouldContainIntField("count", 0) (0.0s)</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="ec7bacff-a8ba-43b2-8d13-373c98e0d2df" testId="b46827ae-aad3-aec7-7ddb-65b84347dd0d" testName="Update product stock status to in stock" computerName="IN-MANSHU-BATRA" duration="00:00:00.0367808" startTime="2026-07-06T13:29:45.9053239+05:30" endTime="2026-07-06T13:29:45.9053243+05:30" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ec7bacff-a8ba-43b2-8d13-373c98e0d2df">
+      <Output>
+        <StdOut>Given a product exists with id 1&#xD;
+-&gt; done: ProductManagementStepDefinitions.GivenAProductExistsWithId(1) (0.0s)&#xD;
+When a client PATCHes /api/products/1/stock with body&#xD;
+  --- multiline step argument ---&#xD;
+  true&#xD;
+-&gt; done: ProductManagementStepDefinitions.WhenAClientPATCHesApiProductsStockWithBody(1, "true") (0.0s)&#xD;
+Then the response status should be 200&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseStatusShouldBe(200) (0.0s)&#xD;
+And the response JSON should contain "InStock": true&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseJsonShouldContainBoolField("InStock", "true") (0.0s)</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="a0d08965-e3ad-4349-bcfd-5c2552572a30" testId="cc14b2fa-096e-0681-3709-8c8f8d297b03" testName="Create with invalid price returns 400" computerName="IN-MANSHU-BATRA" duration="00:00:00.0410219" startTime="2026-07-06T13:29:45.8047247+05:30" endTime="2026-07-06T13:29:45.8047248+05:30" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a0d08965-e3ad-4349-bcfd-5c2552572a30">
+      <Output>
+        <StdOut>When a client POSTs /api/products with body&#xD;
+  --- multiline step argument ---&#xD;
+  { "Name": "Bad Price", "Price": 0, "InStock": true }&#xD;
+-&gt; done: ProductManagementStepDefinitions.WhenAClientPOSTsApiProductsWithBody("{ "Name": "Bad Pr...") (0.0s)&#xD;
+Then the response status should be 400&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseStatusShouldBe(400) (0.0s)</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="a733fecb-ffe3-48d7-82a8-f915d0e9466b" testId="0447c8a6-e332-af9c-a93a-617a56b6a220" testName="Update stock for non-existent product returns 404" computerName="IN-MANSHU-BATRA" duration="00:00:00.3850217" startTime="2026-07-06T13:29:45.6189138+05:30" endTime="2026-07-06T13:29:45.6189270+05:30" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a733fecb-ffe3-48d7-82a8-f915d0e9466b">
+      <Output>
+        <StdOut>When a client PATCHes /api/products/9999/stock with body&#xD;
+  --- multiline step argument ---&#xD;
+  false&#xD;
+-&gt; done: ProductManagementStepDefinitions.WhenAClientPATCHesApiProductsStockWithBody(9999, "false") (0.1s)&#xD;
+Then the response status should be 404&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseStatusShouldBe(404) (0.0s)&#xD;
+And the response JSON should contain message "Product with ID 9999 was not found."&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseJsonShouldContainMessage("Product with ID 9...") (0.0s)</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="851542e7-5967-42ae-9df4-a1fc75e13d33" testId="0b77846d-e578-9ee8-90c6-24da7c0e2404" testName="Update product stock status to out of stock" computerName="IN-MANSHU-BATRA" duration="00:00:00.0400847" startTime="2026-07-06T13:29:45.8449619+05:30" endTime="2026-07-06T13:29:45.8449630+05:30" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="851542e7-5967-42ae-9df4-a1fc75e13d33">
+      <Output>
+        <StdOut>Given a product exists with id 1&#xD;
+-&gt; done: ProductManagementStepDefinitions.GivenAProductExistsWithId(1) (0.0s)&#xD;
+When a client PATCHes /api/products/1/stock with body&#xD;
+  --- multiline step argument ---&#xD;
+  false&#xD;
+-&gt; done: ProductManagementStepDefinitions.WhenAClientPATCHesApiProductsStockWithBody(1, "false") (0.0s)&#xD;
+Then the response status should be 200&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseStatusShouldBe(200) (0.0s)&#xD;
+And the response JSON should contain "InStock": false&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseJsonShouldContainBoolField("InStock", "false") (0.0s)</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="c499dff2-089b-40c0-a1a2-de10ea940792" testId="db17431e-64ee-0998-aa37-02e04a1c26e5" testName="Get non-existent user returns 404 with message" computerName="IN-MANSHU-BATRA" duration="00:00:00.0284997" startTime="2026-07-06T13:29:46.0193760+05:30" endTime="2026-07-06T13:29:46.0193761+05:30" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="c499dff2-089b-40c0-a1a2-de10ea940792">
+      <Output>
+        <StdOut>When a client requests GET /api/GetUserById with userId 9999&#xD;
+-&gt; done: UserManagementStepDefinitions.WhenAClientRequestsGetApiGetUserByIdWithUserId(9999) (0.0s)&#xD;
+Then the response status should be 404&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseStatusShouldBe(404) (0.0s)&#xD;
+And the response JSON should contain message "User with ID 9999 was not found."&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseJsonShouldContainMessage("User with ID 9999...") (0.0s)</StdOut>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="22311113-649e-4359-b7dc-bc8f0c1810c9" testId="c0421ae3-ca47-f542-6de3-4d3d92fba777" testName="Count reflects only in‑stock products" computerName="IN-MANSHU-BATRA" duration="00:00:00.0531127" startTime="2026-07-06T13:29:46.1117994+05:30" endTime="2026-07-06T13:29:46.1117998+05:30" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="22311113-649e-4359-b7dc-bc8f0c1810c9">
+      <Output>
+        <StdOut>Given the product catalog is empty&#xD;
+-&gt; done: ProductManagementStepDefinitions.GivenTheProductCatalogIsEmpty() (0.0s)&#xD;
+And a product exists with payload:&#xD;
+  --- multiline step argument ---&#xD;
+  { "Name": "Widget A", "Price": 10.0, "InStock": true }&#xD;
+-&gt; done: ProductManagementStepDefinitions.GivenAProductExistsWithPayload("{ "Name": "Widget...") (0.0s)&#xD;
+And a product exists with payload:&#xD;
+  --- multiline step argument ---&#xD;
+  { "Name": "Widget B", "Price": 15.0, "InStock": false }&#xD;
+-&gt; done: ProductManagementStepDefinitions.GivenAProductExistsWithPayload("{ "Name": "Widget...") (0.0s)&#xD;
+And a product exists with payload:&#xD;
+  --- multiline step argument ---&#xD;
+  { "Name": "Widget C", "Price": 20.0, "InStock": true }&#xD;
+-&gt; done: ProductManagementStepDefinitions.GivenAProductExistsWithPayload("{ "Name": "Widget...") (0.0s)&#xD;
+When a client requests GET /api/products/in-stock-count&#xD;
+-&gt; done: ProductManagementStepDefinitions.WhenAClientRequestsGetApiProductsInStockCount() (0.0s)&#xD;
+Then the response status should be 200&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseStatusShouldBe(200) (0.0s)&#xD;
+And the response JSON should contain "count": 2&#xD;
+-&gt; done: CommonStepDefinitions.ThenTheResponseJsonShouldContainIntField("count", 2) (0.0s)</StdOut>
+      </Output>
+    </UnitTestResult>
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="Update existing product" storage="c:\users\manshubatra\desktop\java-regression-test\dotnet-component\bin-tests\debug\net9.0\bp.tests.dll" id="1bdbc4b6-8d76-fff4-47a5-abfc1f48de67">
+      <Execution id="a6bf7780-0f1c-462a-bb74-9fb839271925" />
+      <TestMethod codeBase="C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="BP.Tests.Tests.Features.ProductManagementFeature" name="UpdateExistingProduct" />
+    </UnitTest>
+    <UnitTest name="Count is zero when no products exist" storage="c:\users\manshubatra\desktop\java-regression-test\dotnet-component\bin-tests\debug\net9.0\bp.tests.dll" id="c6c53ce3-8cd5-eb56-7fa0-ce9b885d5d77">
+      <Execution id="7fe4dc75-3d8f-49c6-9fd4-8981a3cb775b" />
+      <TestMethod codeBase="C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="BP.Tests.Tests.Features.InStockProductCountFeature" name="CountIsZeroWhenNoProductsExist" />
+    </UnitTest>
+    <UnitTest name="Get non-existent user returns 404 with message" storage="c:\users\manshubatra\desktop\java-regression-test\dotnet-component\bin-tests\debug\net9.0\bp.tests.dll" id="db17431e-64ee-0998-aa37-02e04a1c26e5">
+      <Execution id="c499dff2-089b-40c0-a1a2-de10ea940792" />
+      <TestMethod codeBase="C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="BP.Tests.Tests.Features.UserManagementFeature" name="GetNon_ExistentUserReturns404WithMessage" />
+    </UnitTest>
+    <UnitTest name="Update product stock status to in stock" storage="c:\users\manshubatra\desktop\java-regression-test\dotnet-component\bin-tests\debug\net9.0\bp.tests.dll" id="b46827ae-aad3-aec7-7ddb-65b84347dd0d">
+      <Execution id="ec7bacff-a8ba-43b2-8d13-373c98e0d2df" />
+      <TestMethod codeBase="C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="BP.Tests.Tests.Features.ProductManagementFeature" name="UpdateProductStockStatusToInStock" />
+    </UnitTest>
+    <UnitTest name="Create a valid product" storage="c:\users\manshubatra\desktop\java-regression-test\dotnet-component\bin-tests\debug\net9.0\bp.tests.dll" id="eaf2592b-238b-4491-84b6-159da7aa8384">
+      <Execution id="6afb4655-2932-4056-b6f3-d556ffdfab9b" />
+      <TestMethod codeBase="C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="BP.Tests.Tests.Features.ProductManagementFeature" name="CreateAValidProduct" />
+    </UnitTest>
+    <UnitTest name="Update stock for non-existent product returns 404" storage="c:\users\manshubatra\desktop\java-regression-test\dotnet-component\bin-tests\debug\net9.0\bp.tests.dll" id="0447c8a6-e332-af9c-a93a-617a56b6a220">
+      <Execution id="a733fecb-ffe3-48d7-82a8-f915d0e9466b" />
+      <TestMethod codeBase="C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="BP.Tests.Tests.Features.ProductManagementFeature" name="UpdateStockForNon_ExistentProductReturns404" />
+    </UnitTest>
+    <UnitTest name="Get created product by id" storage="c:\users\manshubatra\desktop\java-regression-test\dotnet-component\bin-tests\debug\net9.0\bp.tests.dll" id="7639f172-a149-8e6b-9e5f-e96b673e44a7">
+      <Execution id="bc1da935-227d-4575-8da4-38b276aa9aca" />
+      <TestMethod codeBase="C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="BP.Tests.Tests.Features.ProductManagementFeature" name="GetCreatedProductById" />
+    </UnitTest>
+    <UnitTest name="Create with invalid price returns 400" storage="c:\users\manshubatra\desktop\java-regression-test\dotnet-component\bin-tests\debug\net9.0\bp.tests.dll" id="cc14b2fa-096e-0681-3709-8c8f8d297b03">
+      <Execution id="a0d08965-e3ad-4349-bcfd-5c2552572a30" />
+      <TestMethod codeBase="C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="BP.Tests.Tests.Features.ProductManagementFeature" name="CreateWithInvalidPriceReturns400" />
+    </UnitTest>
+    <UnitTest name="Count reflects only in‑stock products" storage="c:\users\manshubatra\desktop\java-regression-test\dotnet-component\bin-tests\debug\net9.0\bp.tests.dll" id="c0421ae3-ca47-f542-6de3-4d3d92fba777">
+      <Execution id="22311113-649e-4359-b7dc-bc8f0c1810c9" />
+      <TestMethod codeBase="C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="BP.Tests.Tests.Features.InStockProductCountFeature" name="CountReflectsOnlyInStockProducts" />
+    </UnitTest>
+    <UnitTest name="Delete a product" storage="c:\users\manshubatra\desktop\java-regression-test\dotnet-component\bin-tests\debug\net9.0\bp.tests.dll" id="3649ac34-96e0-2e91-8e2b-670962608f59">
+      <Execution id="955ed82b-4405-47e4-90a6-f8e8e8b911d3" />
+      <TestMethod codeBase="C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="BP.Tests.Tests.Features.ProductManagementFeature" name="DeleteAProduct" />
+    </UnitTest>
+    <UnitTest name="Get non-existent product returns 404 and message" storage="c:\users\manshubatra\desktop\java-regression-test\dotnet-component\bin-tests\debug\net9.0\bp.tests.dll" id="a0f5889c-615e-d815-113c-b36cea98c4da">
+      <Execution id="9ead2bed-5f17-4522-83c4-17b79c46683e" />
+      <TestMethod codeBase="C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="BP.Tests.Tests.Features.ProductManagementFeature" name="GetNon_ExistentProductReturns404AndMessage" />
+    </UnitTest>
+    <UnitTest name="Get weather forecasts returns five items" storage="c:\users\manshubatra\desktop\java-regression-test\dotnet-component\bin-tests\debug\net9.0\bp.tests.dll" id="d52199c5-cabd-0eaa-8e5c-150dfebafd7d">
+      <Execution id="b4eee169-4b10-4461-93fc-71b94622eb49" />
+      <TestMethod codeBase="C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="BP.Tests.Tests.Features.WeatherForecastFeature" name="GetWeatherForecastsReturnsFiveItems" />
+    </UnitTest>
+    <UnitTest name="Get existing user by id" storage="c:\users\manshubatra\desktop\java-regression-test\dotnet-component\bin-tests\debug\net9.0\bp.tests.dll" id="8bd407ad-775a-01fb-89fd-7ddccfea005b">
+      <Execution id="c4c73be4-bee0-4089-9f70-33fe69d2fdeb" />
+      <TestMethod codeBase="C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="BP.Tests.Tests.Features.UserManagementFeature" name="GetExistingUserById" />
+    </UnitTest>
+    <UnitTest name="Update product stock status to out of stock" storage="c:\users\manshubatra\desktop\java-regression-test\dotnet-component\bin-tests\debug\net9.0\bp.tests.dll" id="0b77846d-e578-9ee8-90c6-24da7c0e2404">
+      <Execution id="851542e7-5967-42ae-9df4-a1fc75e13d33" />
+      <TestMethod codeBase="C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="BP.Tests.Tests.Features.ProductManagementFeature" name="UpdateProductStockStatusToOutOfStock" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="7639f172-a149-8e6b-9e5f-e96b673e44a7" executionId="bc1da935-227d-4575-8da4-38b276aa9aca" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3649ac34-96e0-2e91-8e2b-670962608f59" executionId="955ed82b-4405-47e4-90a6-f8e8e8b911d3" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="a0f5889c-615e-d815-113c-b36cea98c4da" executionId="9ead2bed-5f17-4522-83c4-17b79c46683e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d52199c5-cabd-0eaa-8e5c-150dfebafd7d" executionId="b4eee169-4b10-4461-93fc-71b94622eb49" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="8bd407ad-775a-01fb-89fd-7ddccfea005b" executionId="c4c73be4-bee0-4089-9f70-33fe69d2fdeb" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1bdbc4b6-8d76-fff4-47a5-abfc1f48de67" executionId="a6bf7780-0f1c-462a-bb74-9fb839271925" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="eaf2592b-238b-4491-84b6-159da7aa8384" executionId="6afb4655-2932-4056-b6f3-d556ffdfab9b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="c6c53ce3-8cd5-eb56-7fa0-ce9b885d5d77" executionId="7fe4dc75-3d8f-49c6-9fd4-8981a3cb775b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b46827ae-aad3-aec7-7ddb-65b84347dd0d" executionId="ec7bacff-a8ba-43b2-8d13-373c98e0d2df" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="cc14b2fa-096e-0681-3709-8c8f8d297b03" executionId="a0d08965-e3ad-4349-bcfd-5c2552572a30" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0447c8a6-e332-af9c-a93a-617a56b6a220" executionId="a733fecb-ffe3-48d7-82a8-f915d0e9466b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0b77846d-e578-9ee8-90c6-24da7c0e2404" executionId="851542e7-5967-42ae-9df4-a1fc75e13d33" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="db17431e-64ee-0998-aa37-02e04a1c26e5" executionId="c499dff2-089b-40c0-a1a2-de10ea940792" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="c0421ae3-ca47-f542-6de3-4d3d92fba777" executionId="22311113-649e-4359-b7dc-bc8f0c1810c9" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="14" executed="14" passed="14" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v2.5.6+bf9b858c26 (64-bit .NET 9.0.13)&#xD;
+[xUnit.net 00:00:00.14]   Discovering: BP.Tests&#xD;
+[xUnit.net 00:00:00.18]   Discovered:  BP.Tests&#xD;
+[xUnit.net 00:00:00.18]   Starting:    BP.Tests&#xD;
+-&gt; Loading plugin C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\TechTalk.SpecFlow.xUnit.SpecFlowPlugin.dll&#xD;
+-&gt; Loading plugin C:\Users\ManshuBatra\Desktop\java-regression-test\dotnet-component\bin-tests\Debug\net9.0\BP.Tests.dll&#xD;
+-&gt; Using specflow.json&#xD;
+[xUnit.net 00:00:01.27]   Finished:    BP.Tests&#xD;
+</StdOut>
+    </Output>
+  </ResultSummary>
+</TestRun>
