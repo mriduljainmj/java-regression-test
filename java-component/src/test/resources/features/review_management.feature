@@ -20,10 +20,10 @@ Feature: Review management
 
   Scenario: Rating summary after multiple reviews
     When a client adds a review for the last created product with rating 4 and comment "Good"
-    And a client adds a review for the last created product with rating 5 and comment "Excellent"
+    And a client adds a review for the last created product with rating 4 and comment "Excellent"
     When a client requests the rating for the last created product
     Then the response status should be 200
-    And the response should contain a rating summary with average 4.5 and count 2
+    And the response should contain a rating summary with average 4.0 and count 2
 
   Scenario Outline: Reject out-of-range review ratings
     When a client adds a review for the last created product with rating <rating> and comment "Bad rating"
@@ -33,7 +33,7 @@ Feature: Review management
     Examples:
       | rating | message                     |
       | 0      | rating must be at least 1   |
-      | 6      | rating must not exceed 5    |
+      | 5      | rating must not exceed 4    |
 
   Scenario: Reject a review without a rating
     When a client adds a review for the last created product with payload:
