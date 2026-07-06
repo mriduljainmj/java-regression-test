@@ -2,7 +2,7 @@
 
 *Last Updated: 2026-06-29 (Auto-updated on code changes)*
 
-*Last Updated: 2026-07-03 08:12:31 UTC*
+*Last Updated: 2026-07-06 09:51:19 UTC*
 
 *This file is the AI's memory of the project. When loading this project, read this first to understand architecture, APIs, dependencies, and edge cases.*
 
@@ -146,6 +146,11 @@ public Order create(OrderRequest req) {
 ### .NET COMPONENT (ASP.NET Core)
 
 #### **ProductController.cs** (`/api/products`)
+
+
+**[AUTO-UPDATE] .NET endpoints detected:**
+- PUT api/products/{id} (Update)
+- DELETE api/products/{id} (Delete)
 
 
 **[AUTO-UPDATE] .NET endpoints detected:**
