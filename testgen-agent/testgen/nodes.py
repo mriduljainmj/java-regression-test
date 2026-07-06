@@ -1,5 +1,7 @@
 """LangGraph nodes for the Cucumber regression test-generation pipeline."""
 
+from __future__ import annotations
+
 import json
 import logging
 import os
