@@ -2,7 +2,7 @@
 
 *Last Updated: 2026-06-29 (Auto-updated on code changes)*
 
-*Last Updated: 2026-07-06 16:45:34 UTC*
+*Last Updated: 2026-07-06 16:48:04 UTC*
 
 *This file is the AI's memory of the project. When loading this project, read this first to understand architecture, APIs, dependencies, and edge cases.*
 
@@ -368,6 +368,13 @@ Java Constraint: Cannot delete product with orders
 ---
 
 ## 🧪 PART 5: Test Generation Strategy
+
+
+**[AUTO-UPDATE] Feature scenarios detected:**
+
+**Product price validation** (2 scenarios):
+- Create product with price exceeding maximum returns 400
+- Create product with price equal to maximum allowed succeeds
 
 
 **[AUTO-UPDATE] Feature scenarios detected:**
