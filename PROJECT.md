@@ -12,7 +12,7 @@ _This file is the AI's memory of the project. When loading this project, read th
 
 ## 🤖 Auto-Generated Snapshot
 
-*Last updated: 2026-07-07 03:13:08 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
+*Last updated: 2026-07-07 06:08:19 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
 
 ### API Endpoints
 
@@ -38,6 +38,7 @@ _This file is the AI's memory of the project. When loading this project, read th
   - `GET /api/products/in-stock` → GetInStock()
   - `GET /api/products/inventory-count` → GetInventoryCount()
   - `GET /api/products/in-stock-count` → GetInStockCount()
+  - `GET /api/products/out-of-stock-count` → GetOutOfStockCount()
   - `GET /api/products/{id}` → GetById()
   - `POST /api/products` → Create()
   - `PUT /api/products/{id}` → Update()
