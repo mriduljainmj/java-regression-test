@@ -67,6 +67,44 @@ The tests the agent maintains live in:
 | `regression.yml` | Runs the existing test suite to confirm code and tests still match | Any push or PR that touches `java-component/` or `dotnet-component/` |
 | `auto-update-mindmap.yml` | Keeps `PROJECT.md` (a human-readable knowledge base) up to date | On pushes that change controllers/services/features |
 
+### Detailed CI + refinement flow
+
+```mermaid
+flowchart TD
+  A[Developer pushes to feature branch] --> B[Open PR to develop or main]
+
+  B --> C[regression.yml runs checks]
+  C --> C1{Checks pass?}
+  C1 -->|No| C2[Fix code and push again]
+  C2 --> C
+  C1 -->|Yes| D[Merge PR]
+
+  D --> E[Push event on develop or main]
+  E --> F[generate-tests.yml]
+  E --> G[regression.yml]
+  E --> H[auto-update-mindmap.yml]
+
+  F --> F1[Detect Java vs .NET from changed files]
+  F1 --> F2[Agent generate -> validate -> run tests]
+  F2 --> F3{Generation result}
+  F3 -->|Pass or max retries reached| I[Create or update test PR]
+  F3 -->|No relevant change| J[Skip]
+
+  G --> G1[Run impacted suite only]
+  G1 --> G2[Publish TRX/Cucumber artifacts]
+
+  H --> H1[Update PROJECT.md if needed]
+
+  I --> K[QA reviews generated test PR]
+  K --> L[QA comment + add label regen-tests]
+  L --> M[refine-tests.yml reruns agent with guidance]
+  M --> N[Push updates to same PR branch]
+  N --> O[Regression checks rerun]
+  O --> K
+```
+
+Note: the refinement trigger label is `regen-tests`.
+
 **Why two main workflows?** `generate-tests` *writes* the tests; `regression` *checks* them.
 The agent's own PRs are checked by `regression` before you merge — so a broken generated
 test can't sneak in.
