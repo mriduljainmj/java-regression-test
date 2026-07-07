@@ -110,7 +110,13 @@ USER_PROMPT_TEMPLATE = """\
 5. AZURE DEVOPS WORK ITEM CONTEXT (If available):
 {ado_work_item_context}
 
-Analyze the changes and produce the regression test cases.
+6. REVIEWER GUIDANCE — EDGE CASES TO COVER (If provided):
+{reviewer_guidance}
+
+Analyze the changes and produce the regression test cases. If reviewer guidance is
+provided, you MUST add at least one scenario for every edge case or condition it
+names — in addition to the happy path and the standard negative paths you would
+normally generate. Treat that guidance as required coverage, not optional hints.
 """
 
 OUTPUT_FORMAT_INSTRUCTIONS = """\

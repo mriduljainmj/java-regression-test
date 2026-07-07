@@ -67,6 +67,7 @@ class TestGenState(TypedDict, total=False):
     create_pr: bool
     ado_work_item_id: str
     ado_work_item_context: str
+    reviewer_guidance: str  # free-text edge-case hints from a human, injected into the prompt
     resolved_base: str
     project_type: str  # "java" | "dotnet" — detected in collect_diff, must persist end-to-end
 

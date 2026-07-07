@@ -304,6 +304,18 @@ def gather_context(state: TestGenState) -> TestGenState:
             "Use AB#1234 / ADO-1234 in the commit or set AZDO_WORK_ITEM_ID to enrich the prompt."
         )
 
+    # Optional free-text guidance from a human: specific edge cases / scenarios the
+    # generated tests must cover. Comes from the CLI (--guidance) or the
+    # TESTGEN_GUIDANCE env var (used by the workflow_dispatch input in CI).
+    reviewer_guidance = (state.get("reviewer_guidance") or os.environ.get("TESTGEN_GUIDANCE", "")).strip()
+    if reviewer_guidance:
+        logger.info("Reviewer guidance provided (%d chars) — model must cover the named edge cases", len(reviewer_guidance))
+    else:
+        reviewer_guidance = (
+            "No specific guidance provided. Use your judgment to cover boundary values, "
+            "invalid inputs, and error paths for the changed behavior."
+        )
+
     if project_type == "java":
         # All main-source Java files, with changed ones first.
         changed_java = [
@@ -388,6 +400,7 @@ def gather_context(state: TestGenState) -> TestGenState:
         "api_spec": api_spec[:MAX_CONTEXT_CHARS] or "Not available.",
         "ado_work_item_id": ado_work_item_id,
         "ado_work_item_context": ado_work_item_context[:MAX_CONTEXT_CHARS],
+        "reviewer_guidance": reviewer_guidance[:MAX_CONTEXT_CHARS],
         "step_patterns": step_patterns,
         "attempts": 0,
         "validation_errors": [],
@@ -528,6 +541,7 @@ def generate_tests(state: TestGenState) -> TestGenState:
         existing_feature_examples=state["existing_feature_examples"],
         api_spec=state["api_spec"],
         ado_work_item_context=state.get("ado_work_item_context", "Not available."),
+        reviewer_guidance=state.get("reviewer_guidance", "No specific guidance provided."),
     )
 
     if state.get("validation_errors"):
@@ -1091,22 +1105,37 @@ def create_pull_request(state: TestGenState) -> TestGenState:
 
     head_sha = _run(["git", "rev-parse", "--short=12", state["head_ref"]], cwd=repo).strip()
     ado_work_item_id = state.get("ado_work_item_id") or os.environ.get("AZDO_WORK_ITEM_ID", "").strip()
+
+    # Refinement mode: when re-running from QA feedback on an existing PR, commit the
+    # updated tests onto that PR's branch instead of cutting a new one (set by the
+    # label-triggered refine-tests workflow). Empty for the normal first-pass flow.
+    refine_branch = os.environ.get("TESTGEN_PR_BRANCH", "").strip()
     branch_prefix = f"testgen/ado-{ado_work_item_id}-" if ado_work_item_id else "testgen/"
-    branch = f"{branch_prefix}{head_sha}-{int(time.time())}"
+    branch = refine_branch or f"{branch_prefix}{head_sha}-{int(time.time())}"
 
     original_ref = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo).strip()
-    _run(["git", "checkout", "-b", branch], cwd=repo)
+    if refine_branch:
+        _run(["git", "checkout", branch], cwd=repo)  # already exists; workflow checked it out
+    else:
+        _run(["git", "checkout", "-b", branch], cwd=repo)
     try:
         _run(["git", "add", *state["written_files"]], cwd=repo)
         staged = _run(["git", "diff", "--cached", "--name-only"], cwd=repo).strip()
         if not staged:
             logger.info("nothing staged after add; skipping PR")
             return {"pr_url": None, "skipped_reason": "no effective changes to commit"}
-        commit_message = "test: regenerate Cucumber regression tests"
+        verb = "refine" if refine_branch else "regenerate"
+        commit_message = f"test: {verb} regression tests"
         if ado_work_item_id:
-            commit_message = f"test: [ADO-{ado_work_item_id}] regenerate Cucumber regression tests"
+            commit_message = f"test: [ADO-{ado_work_item_id}] {verb} regression tests"
         _run(["git", "commit", "-m", commit_message + "\n\n" + generation.analysis_summary], cwd=repo)
         _run(["git", "push", "-u", "origin", branch], cwd=repo)
+
+        # Refinement run: the PR already exists — pushing to its branch updates it
+        # in place. No new PR, no metadata marker needed.
+        if refine_branch:
+            logger.info("Refinement pushed to existing PR branch %s", branch)
+            return {"pr_url": None, "skipped_reason": f"updated existing PR branch {branch}"}
 
         endpoints = "\n".join(f"- `{e}`" for e in generation.impacted_endpoints) or "- none"
 
@@ -1129,7 +1158,17 @@ def create_pull_request(state: TestGenState) -> TestGenState:
         if ado_work_item_id:
             title = f"[ADO-{ado_work_item_id}] {title}"
 
+        # Machine-readable marker (invisible in rendered Markdown) so the
+        # label-triggered refine workflow can recover what to regenerate against.
+        base_sha = _run(["git", "rev-parse", state.get("resolved_base") or state["base_ref"]], cwd=repo).strip()
+        head_full = _run(["git", "rev-parse", state["head_ref"]], cwd=repo).strip()
+        meta_marker = (
+            f"<!-- testgen-meta: base={base_sha} head={head_full} "
+            f"project_type={state.get('project_type', 'java')} -->"
+        )
+
         body_parts = [
+            meta_marker,
             "## Auto-generated regression tests",
             "",
             generation.analysis_summary,

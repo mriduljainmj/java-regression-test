@@ -63,6 +63,9 @@ USER_PROMPT_TEMPLATE = """\
 5. AZURE DEVOPS WORK ITEM CONTEXT (If available):
 {ado_work_item_context}
 
+6. REVIEWER GUIDANCE — EDGE CASES TO COVER (If provided):
+{reviewer_guidance}
+
 Generate regression tests from the code changes.
 
 Mandatory behavior:
@@ -71,6 +74,9 @@ Mandatory behavior:
 - Reuse existing step definitions whenever possible.
 - Add STEPDEF blocks only for new wording not covered by existing bindings.
 - Ensure every generated step is bound (existing or generated glue).
+- If reviewer guidance is provided, you MUST add at least one scenario for every
+  edge case or condition it names, in addition to the standard happy/negative paths.
+  Treat that guidance as required coverage, not optional hints.
 """
 
 

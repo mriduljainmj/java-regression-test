@@ -35,6 +35,9 @@ def main() -> int:
                         help="Write feature files only; skip branch/commit/PR creation")
     parser.add_argument("--ado-work-item-id", required=False, default="",
                         help="Azure DevOps work item id to enrich the prompt and PR metadata")
+    parser.add_argument("--guidance", required=False, default="",
+                        help="Free-text reviewer guidance: edge cases / scenarios the AI must "
+                             "cover (also settable via the TESTGEN_GUIDANCE env var)")
     args = parser.parse_args()
 
     app = build_graph()
@@ -46,6 +49,7 @@ def main() -> int:
                 "head_ref": args.head,
                 "create_pr": not args.no_pr,
                 "ado_work_item_id": args.ado_work_item_id.strip(),
+                "reviewer_guidance": args.guidance.strip(),
             }
         )
     except Exception as e:
