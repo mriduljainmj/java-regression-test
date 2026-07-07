@@ -68,11 +68,26 @@ jobs:
             --results-directory TestResults --logger "trx;LogFileName=dotnet-tests.trx"
           TEST_RESULT=$?
 
-          # Optional readable BDD report (SpecFlow LivingDoc) — best effort.
+          # Optional readable BDD report (SpecFlow LivingDoc) with a TRX HTML fallback.
           export PATH="$PATH:$HOME/.dotnet/tools"
           dotnet tool update --global SpecFlow.Plus.LivingDoc.CLI --version 3.* || true
-          "$HOME/.dotnet/tools/livingdoc" test-assembly bin-tests/Debug/net9.0/BP.Tests.dll \
-            -t TestResults/dotnet-tests.trx -o TestResults/dotnet-livingdoc.html || true
+
+          TEST_DLL="$(find bin-tests -type f -name 'BP.Tests.dll' | head -n 1 || true)"
+          if [ -n "$TEST_DLL" ] && [ -f "TestResults/dotnet-tests.trx" ]; then
+            "$HOME/.dotnet/tools/livingdoc" test-assembly "$TEST_DLL" \
+              -t TestResults/dotnet-tests.trx -o TestResults/dotnet-livingdoc.html || true
+          else
+            echo "::warning::Could not find BP.Tests.dll or dotnet-tests.trx for LivingDoc generation"
+          fi
+
+          # If LivingDoc is missing, generate a generic HTML test report from TRX.
+          if [ ! -f "TestResults/dotnet-livingdoc.html" ] && [ -f "TestResults/dotnet-tests.trx" ]; then
+            dotnet tool update --global dotnet-reportgenerator-globaltool --version 5.* || true
+            "$HOME/.dotnet/tools/reportgenerator" \
+              -reports:"TestResults/dotnet-tests.trx" \
+              -targetdir:"TestResults/trx-html" \
+              -reporttypes:"HtmlInline_AzurePipelines;Html" || true
+          fi
 
           if [ $TEST_RESULT -ne 0 ]; then
             echo "::error::.NET tests failed"
@@ -101,5 +116,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cucumber-report-dotnet
-          path: dotnet-component/TestResults/dotnet-livingdoc.html
+          path: |
+            dotnet-component/TestResults/dotnet-livingdoc.html
+            dotnet-component/TestResults/trx-html/**
           if-no-files-found: warn
