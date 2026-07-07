@@ -12,7 +12,7 @@ _This file is the AI's memory of the project. When loading this project, read th
 
 ## 🤖 Auto-Generated Snapshot
 
-*Last updated: 2026-07-07 06:08:19 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
+*Last updated: 2026-07-07 06:15:38 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
 
 ### API Endpoints
 
@@ -77,7 +77,7 @@ _This file is the AI's memory of the project. When loading this project, read th
   - ratingSummary() → RatingSummary
   - clear() → void
 
-### Feature Coverage (44 scenarios across 8 files)
+### Feature Coverage (46 scenarios across 9 files)
 
 - **In‑stock product count** — 2 scenario(s) (`product_instock_count.feature`)
   - Count is zero when no products exist
@@ -92,6 +92,9 @@ _This file is the AI's memory of the project. When loading this project, read th
   - Update product stock status to out of stock
   - Update product stock status to in stock
   - Update stock for non-existent product returns 404
+- **Out-of-stock product count** — 2 scenario(s) (`product_out_of_stock_count.feature`)
+  - Count is zero when no products exist
+  - Count reflects only out-of-stock products
 - **Product price validation** — 3 scenario(s) (`product_price_validation.feature`)
   - Create product with price exceeding maximum returns 400
   - Create product with price equal to maximum allowed succeeds
