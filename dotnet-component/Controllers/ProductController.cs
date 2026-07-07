@@ -68,8 +68,8 @@ namespace BP.Controllers
         {
             if (product == null || string.IsNullOrWhiteSpace(product.Name))
                 return BadRequest(new { message = "Product name is required." });
-            if (product.Price > 2000000)
-                return BadRequest(new { message = "Product price must not exceed 2000000." });
+            if (product.Price > 1000000)
+                return BadRequest(new { message = "Product price must not exceed 1000000." });
             if (!ModelState.IsValid) return BadRequest(ModelState);
             var created = _service.Create(product);
             return CreatedAtAction(nameof(GetById), new { id = created.ProductId }, created);
