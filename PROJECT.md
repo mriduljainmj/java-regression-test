@@ -12,7 +12,7 @@ _This file is the AI's memory of the project. When loading this project, read th
 
 ## 🤖 Auto-Generated Snapshot
 
-*Last updated: 2026-07-07 06:15:38 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
+*Last updated: 2026-07-07 08:30:42 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
 
 ### API Endpoints
 
@@ -33,6 +33,9 @@ _This file is the AI's memory of the project. When loading this project, read th
 
 **.NET (ASP.NET Core)**
 
+- `PricingOrchestrationController`
+  - `GET /api/discount-policy` → GetDiscountPolicy()
+  - `POST /api/order-total-from-policy` → CalculateOrderTotalFromPolicy()
 - `ProductController`
   - `GET /api/products` → GetAll()
   - `GET /api/products/in-stock` → GetInStock()
