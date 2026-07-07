@@ -66,6 +66,8 @@ def main() -> int:
         "impacted_endpoints": generation.impacted_endpoints,
         "analysis_summary": generation.analysis_summary,
         "written_files": result.get("written_files", []),
+        "tests_passed": result.get("tests_passed"),
+        "test_report": result.get("test_report"),
         "pr_url": result.get("pr_url"),
     }
     if result.get("skipped_reason"):

@@ -103,6 +103,7 @@ jobs:
           fi
 
       - name: Regenerate tests with QA guidance (push to same PR branch)
+        id: run
         working-directory: testgen-agent
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -118,10 +119,76 @@ jobs:
         run: |
           git config user.name "testgen-agent"
           git config user.email "testgen-agent@users.noreply.github.com"
+          # Capture the agent's JSON summary (stdout); logs still stream via stderr.
+          set +e
           python main.py \
             --repo "$GITHUB_WORKSPACE" \
             --base "${{ steps.meta.outputs.base }}" \
-            --head "${{ steps.meta.outputs.head }}"
+            --head "${{ steps.meta.outputs.head }}" > "$RUNNER_TEMP/agent_out.json"
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          echo "----- agent summary (stdout) -----"
+          cat "$RUNNER_TEMP/agent_out.json" || true
+          exit $code
+
+      - name: Comment the outcome on the PR
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          AGENT_EXIT: ${{ steps.run.outputs.exit_code }}
+          GUIDANCE: ${{ steps.meta.outputs.guidance }}
+        run: |
+          OUT="$RUNNER_TEMP/agent_out.json"
+          BODY="$RUNNER_TEMP/comment.md"
+          : > "$BODY"
+
+          if [ "${AGENT_EXIT:-1}" != "0" ]; then
+            {
+              echo "🤖 **Refine run failed.**"
+              echo ""
+              echo "The agent errored — most often a transient free-model rate limit (429)."
+              echo "Re-add the \`regen-tests\` label to retry, or check the Actions log."
+            } >> "$BODY"
+          else
+            WRITTEN=$(jq -r '(.written_files // []) | length' "$OUT" 2>/dev/null || echo 0)
+            if [ "${WRITTEN:-0}" -gt 0 ] 2>/dev/null; then
+              {
+                echo "🤖 **Refined from your guidance** — pushed an update (${WRITTEN} file(s))."
+                SUMMARY=$(jq -r '.analysis_summary // ""' "$OUT")
+                [ -n "$SUMMARY" ] && { echo ""; echo "> $SUMMARY"; }
+                echo ""
+                jq -r '(.written_files // [])[] | "- `" + . + "`"' "$OUT"
+                PASSED=$(jq -r '.tests_passed' "$OUT")
+                REPORT=$(jq -r '.test_report // ""' "$OUT")
+                echo ""
+                if [ "$PASSED" = "true" ]; then
+                  echo "✅ Generated tests passed locally. ${REPORT}"
+                elif [ "$PASSED" = "false" ]; then
+                  echo "⚠️ Tests still failing after self-correction — needs review. ${REPORT}"
+                fi
+                echo ""
+                echo "The regression check will re-run on the new commit."
+              } >> "$BODY"
+            else
+              {
+                echo "🤖 **No change** — the regenerated tests were identical to the current suite, so nothing was pushed."
+                NOTE=$(jq -r '.note // ""' "$OUT" 2>/dev/null || echo "")
+                [ -n "$NOTE" ] && { echo ""; echo "_${NOTE}_"; }
+                echo ""
+                echo "Try a more specific instruction — name the exact inputs, status codes, and messages to assert."
+              } >> "$BODY"
+            fi
+          fi
+
+          if [ -n "$(printf '%s' "$GUIDANCE" | tr -d '[:space:]')" ]; then
+            G=$(printf '%s' "$GUIDANCE" | head -c 300 | tr '\n' ' ')
+            { echo ""; echo "<sub>Guidance used: ${G}</sub>"; } >> "$BODY"
+          fi
+
+          cat "$BODY"
+          gh pr comment "$PR" --body-file "$BODY"
 
       - name: Remove the label (so it can be re-applied to run again)
         if: always()
