@@ -12,7 +12,7 @@ _This file is the AI's memory of the project. When loading this project, read th
 
 ## 🤖 Auto-Generated Snapshot
 
-_Last updated: 2026-07-06 17:15:12 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten._
+*Last updated: 2026-07-07 03:04:11 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
 
 ### API Endpoints
 
@@ -76,7 +76,7 @@ _Last updated: 2026-07-06 17:15:12 UTC — regenerated automatically by `update-
   - ratingSummary() → RatingSummary
   - clear() → void
 
-### Feature Coverage (41 scenarios across 7 files)
+### Feature Coverage (43 scenarios across 8 files)
 
 - **In‑stock product count** — 2 scenario(s) (`product_instock_count.feature`)
   - Count is zero when no products exist
@@ -91,6 +91,9 @@ _Last updated: 2026-07-06 17:15:12 UTC — regenerated automatically by `update-
   - Update product stock status to out of stock
   - Update product stock status to in stock
   - Update stock for non-existent product returns 404
+- **Product price validation** — 2 scenario(s) (`product_price_validation.feature`)
+  - Create product with price exceeding maximum returns 400
+  - Create product with price equal to maximum allowed succeeds
 - **User management** — 2 scenario(s) (`user_management.feature`)
   - Get existing user by id
   - Get non-existent user returns 404 with message
@@ -273,37 +276,23 @@ public Order create(OrderRequest req) {
 
 #### **ProductController.cs** (`/api/products`)
 
-**[AUTO-UPDATE] .NET endpoints detected:**
+- PUT api/products/{id} (Update)
+- DELETE api/products/{id} (Delete)
 
 - PUT api/products/{id} (Update)
 - DELETE api/products/{id} (Delete)
 
-**[AUTO-UPDATE] .NET endpoints detected:**
+- PUT api/products/{id} (Update)
+- DELETE api/products/{id} (Delete)
 
 - PUT api/products/{id} (Update)
 - DELETE api/products/{id} (Delete)
 
-**[AUTO-UPDATE] .NET endpoints detected:**
-
 - PUT api/products/{id} (Update)
 - DELETE api/products/{id} (Delete)
 
-**[AUTO-UPDATE] .NET endpoints detected:**
-
 - PUT api/products/{id} (Update)
 - DELETE api/products/{id} (Delete)
-
-**[AUTO-UPDATE] .NET endpoints detected:**
-
-- PUT api/products/{id} (Update)
-- DELETE api/products/{id} (Delete)
-
-**[AUTO-UPDATE] .NET endpoints detected:**
-
-- PUT api/products/{id} (Update)
-- DELETE api/products/{id} (Delete)
-
-**[AUTO-UPDATE] .NET endpoints detected:**
 
 - PUT api/products/{id} (Update)
 - DELETE api/products/{id} (Delete)
@@ -503,14 +492,10 @@ Java Constraint: Cannot delete product with orders
 
 ## 🧪 PART 5: Test Generation Strategy
 
-**[AUTO-UPDATE] Feature scenarios detected:**
-
 **Product price validation** (2 scenarios):
 
 - Create product with price exceeding maximum returns 400
 - Create product with price equal to maximum allowed succeeds
-
-**[AUTO-UPDATE] Feature scenarios detected:**
 
 **Review management** (6 scenarios):
 
