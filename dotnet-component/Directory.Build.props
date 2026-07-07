@@ -1,4 +1,8 @@
 <Project>
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**\bin\**;**\obj\**</DefaultItemExcludes>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'BP.Tests'">
     <BaseIntermediateOutputPath>obj-tests\</BaseIntermediateOutputPath>
     <MSBuildProjectExtensionsPath>obj-tests\</MSBuildProjectExtensionsPath>
