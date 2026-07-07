@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Linq;
 
 namespace BP.Controllers
 {
@@ -50,6 +51,14 @@ namespace BP.Controllers
         public IActionResult GetInStockCount()
         {
             var count = _service.GetProductInventoryCount();
+            return Ok(new { count });
+        }
+
+        [HttpGet("out-of-stock-count")]
+        [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+        public IActionResult GetOutOfStockCount()
+        {
+            var count = _service.GetAll().Count(p => !p.InStock);
             return Ok(new { count });
         }
 
