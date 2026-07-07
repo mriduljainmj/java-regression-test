@@ -85,15 +85,15 @@ flowchart TD
   E --> H[auto-update-mindmap.yml]
 
   F --> F1[Detect Java vs .NET from changed files]
-  F1 --> F2[Agent generate -> validate -> run tests]
+  F1 --> F2[Agent generate -> validate -> run tests (using code diff + ADO ticket description + developer comments as guidance)]
   F2 --> F3{Generation result}
   F3 -->|Pass or max retries reached| I[Create or update test PR]
   F3 -->|No relevant change| J[Skip]
 
   G --> G1[Run impacted suite only]
-  G1 --> G2[Publish TRX/Cucumber artifacts]
+  G1 --> G2[Publish TRX/Cucumber artifacts (fails when existing flow data/expected baseline changes break current tests)]
 
-  H --> H1[Update PROJECT.md if needed]
+  H --> H1[Update PROJECT.md if needed (mindmap update driven by regex parsing of changed files/endpoints)]
 
   I --> K[QA reviews generated test PR]
   K --> L[QA comment + add label regen-tests]
