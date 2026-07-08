@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -78,10 +77,8 @@ namespace BP.Controllers
 
     public class OrderTotalFromPolicyRequest
     {
-        [Range(0.01, double.MaxValue, ErrorMessage = "UnitPrice must be greater than 0")]
         public decimal UnitPrice { get; set; }
 
-        [Range(1, int.MaxValue, ErrorMessage = "Quantity must be greater than 0")]
         public int Quantity { get; set; }
 
         public bool IsLoyaltyMember { get; set; }
