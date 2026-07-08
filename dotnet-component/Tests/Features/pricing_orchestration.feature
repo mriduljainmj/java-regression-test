@@ -4,13 +4,29 @@ Feature: Pricing orchestration
   I want API A to consume API B discount policy
   So that order totals are calculated from upstream policy responses
 
-  Scenario: API B returns discount policy for quantity and loyalty
-    When a client requests GET /api/discount-policy with quantity 25 and loyalty true
+  Scenario Outline: API B returns discount policy for quantity and loyalty
+    When a client requests GET /api/discount-policy with quantity <quantity> and loyalty <loyalty>
     Then the response status should be 200
-    And the response JSON should contain "BaseDiscountPercent": 12
-    And the response JSON should contain "LoyaltyDiscountPercent": 7
-    And the response JSON should contain "TotalDiscountPercent": 19
+    And the response JSON should contain "BaseDiscountPercent": <base>
+    And the response JSON should contain "LoyaltyDiscountPercent": <loyaltyPercent>
+    And the response JSON should contain "TotalDiscountPercent": <total>
     And the response JSON should contain "PolicyVersion": "v1"
+
+    Examples:
+      | quantity | loyalty | base | loyaltyPercent | total |
+      | 5        | false   | 0    | 0              | 0     |
+      | 5        | true    | 0    | 9              | 9     |
+      | 10       | false   | 8    | 0              | 8     |
+      | 10       | true    | 8    | 9              | 17    |
+      | 24       | false   | 8    | 0              | 8     |
+      | 24       | true    | 8    | 9              | 17    |
+      | 25       | false   | 15   | 0              | 15    |
+      | 25       | true    | 15   | 9              | 24    |
+      | 49       | false   | 15   | 0              | 15    |
+      | 49       | true    | 15   | 9              | 24    |
+      | 50       | false   | 20   | 0              | 20    |
+      | 50       | true    | 20   | 9              | 29    |
+      | 100      | true    | 20   | 9              | 29    |
 
   Scenario: API A calculates order total using API B response
     When a client POSTs /api/order-total-from-policy with body
@@ -18,8 +34,8 @@ Feature: Pricing orchestration
       { "UnitPrice": 100.00, "Quantity": 1, "IsLoyaltyMember": true }
       """
     Then the response status should be 200
-    And the response JSON should contain "TotalDiscountPercent": 7
-    And the response JSON should contain decimal "FinalTotal": 93.00
+    And the response JSON should contain "TotalDiscountPercent": 9
+    And the response JSON should contain decimal "FinalTotal": 91.00
     And the response JSON should contain "PolicyVersion": "v1"
 
   Scenario: API A rejects request with non‑positive quantity
