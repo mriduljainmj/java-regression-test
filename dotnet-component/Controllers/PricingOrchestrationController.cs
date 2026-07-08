@@ -1,8 +1,5 @@
 using System;
 using System.ComponentModel.DataAnnotations;
-using System.Net.Http.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,12 +9,7 @@ namespace BP.Controllers
     [Route("api")]
     public class PricingOrchestrationController : ControllerBase
     {
-        private readonly IHttpClientFactory _httpClientFactory;
-
-        public PricingOrchestrationController(IHttpClientFactory httpClientFactory)
-        {
-            _httpClientFactory = httpClientFactory;
-        }
+        public PricingOrchestrationController() { }
 
         // API B: source-of-truth policy endpoint.
         [HttpGet("discount-policy")]
@@ -43,33 +35,19 @@ namespace BP.Controllers
             });
         }
 
-        // API A: calls API B and computes total using B's response.
+        // API A: consumes API B response shape and computes total from that policy.
         [HttpPost("order-total-from-policy")]
         [ProducesResponseType(typeof(OrderTotalFromPolicyResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status502BadGateway)]
-        public async Task<IActionResult> CalculateOrderTotalFromPolicy([FromBody] OrderTotalFromPolicyRequest request, CancellationToken cancellationToken)
+        public IActionResult CalculateOrderTotalFromPolicy([FromBody] OrderTotalFromPolicyRequest request)
         {
             if (request == null || request.Quantity <= 0 || request.UnitPrice <= 0)
                 return BadRequest(new { message = "UnitPrice and Quantity must be greater than 0." });
 
-            string baseUrl = $"{Request.Scheme}://{Request.Host}";
-            string policyUrl = $"{baseUrl}/api/discount-policy?quantity={request.Quantity}&isLoyaltyMember={request.IsLoyaltyMember.ToString().ToLowerInvariant()}";
-
-            var client = _httpClientFactory.CreateClient();
-            var policyResponse = await client.GetAsync(policyUrl, cancellationToken);
-            if (!policyResponse.IsSuccessStatusCode)
-            {
-                return StatusCode(StatusCodes.Status502BadGateway, new
-                {
-                    message = "Failed to fetch discount policy from API B.",
-                    upstreamStatus = (int)policyResponse.StatusCode
-                });
-            }
-
-            var policy = await policyResponse.Content.ReadFromJsonAsync<DiscountPolicyResponse>(cancellationToken: cancellationToken);
-            if (policy == null)
-                return StatusCode(StatusCodes.Status502BadGateway, new { message = "Invalid discount policy response from API B." });
+            var policyResult = GetDiscountPolicy(request.Quantity, request.IsLoyaltyMember);
+            var okResult = policyResult.Result as OkObjectResult;
+            if (okResult?.Value is not DiscountPolicyResponse policy)
+                return BadRequest(new { message = "Unable to resolve discount policy from API B." });
 
             decimal subtotal = request.UnitPrice * request.Quantity;
             decimal discountAmount = subtotal * policy.TotalDiscountPercent / 100m;
