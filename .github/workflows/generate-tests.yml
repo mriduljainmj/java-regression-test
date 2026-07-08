@@ -36,8 +36,8 @@ concurrency:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    # Don't react to the test PRs this workflow itself produces.
-    if: "${{ github.event_name == 'workflow_dispatch' || (github.event.head_commit && !startsWith(github.event.head_commit.message, 'test: ')) }}"
+    # Don't react to merges of test PRs this workflow itself produces.
+    if: "${{ github.event_name == 'workflow_dispatch' || (github.event.head_commit && !startsWith(github.event.head_commit.message, 'test: ') && !contains(github.event.head_commit.message, 'testgen/')) }}"
     steps:
       - uses: actions/checkout@v4
         with:
