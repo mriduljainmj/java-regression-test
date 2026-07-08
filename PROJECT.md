@@ -12,7 +12,7 @@ _This file is the AI's memory of the project. When loading this project, read th
 
 ## 🤖 Auto-Generated Snapshot
 
-*Last updated: 2026-07-08 06:09:47 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
+*Last updated: 2026-07-08 06:23:23 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
 
 ### API Endpoints
 
@@ -80,11 +80,13 @@ _This file is the AI's memory of the project. When loading this project, read th
   - ratingSummary() → RatingSummary
   - clear() → void
 
-### Feature Coverage (48 scenarios across 10 files)
+### Feature Coverage (50 scenarios across 10 files)
 
-- **Pricing orchestration** — 2 scenario(s) (`pricing_orchestration.feature`)
+- **Pricing orchestration** — 4 scenario(s) (`pricing_orchestration.feature`)
   - API B returns discount policy for quantity and loyalty
   - API A calculates order total using API B response
+  - API A rejects request with non‑positive quantity
+  - API A rejects request with non‑positive unit price
 - **In‑stock product count** — 2 scenario(s) (`product_instock_count.feature`)
   - Count is zero when no products exist
   - Count reflects only in‑stock products
