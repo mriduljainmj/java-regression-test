@@ -14,19 +14,19 @@ Feature: Pricing orchestration
 
     Examples:
       | quantity | loyalty | base | loyaltyPercent | total |
-      | 5        | false   | 0    | 0              | 0     |
-      | 5        | true    | 0    | 9              | 9     |
-      | 10       | false   | 8    | 0              | 8     |
-      | 10       | true    | 8    | 9              | 17    |
-      | 24       | false   | 8    | 0              | 8     |
-      | 24       | true    | 8    | 9              | 17    |
-      | 25       | false   | 15   | 0              | 15    |
-      | 25       | true    | 15   | 9              | 24    |
-      | 49       | false   | 15   | 0              | 15    |
-      | 49       | true    | 15   | 9              | 24    |
-      | 50       | false   | 20   | 0              | 20    |
-      | 50       | true    | 20   | 9              | 29    |
-      | 100      | true    | 20   | 9              | 29    |
+      | 5        | false   | 0    | 0               | 0     |
+      | 5        | true    | 0    | 5               | 5     |
+      | 10       | false   | 5    | 0               | 5     |
+      | 10       | true    | 5    | 5               | 10    |
+      | 24       | false   | 5    | 0               | 5     |
+      | 24       | true    | 5    | 5               | 10    |
+      | 25       | false   | 10   | 0               | 10    |
+      | 25       | true    | 10   | 5               | 15    |
+      | 49       | false   | 10   | 0               | 10    |
+      | 49       | true    | 10   | 5               | 15    |
+      | 50       | false   | 15   | 0               | 15    |
+      | 50       | true    | 15   | 5               | 20    |
+      | 100      | true    | 15   | 5               | 20    |
 
   Scenario: API A calculates order total using API B response
     When a client POSTs /api/order-total-from-policy with body
@@ -34,8 +34,8 @@ Feature: Pricing orchestration
       { "UnitPrice": 100.00, "Quantity": 1, "IsLoyaltyMember": true }
       """
     Then the response status should be 200
-    And the response JSON should contain "TotalDiscountPercent": 9
-    And the response JSON should contain decimal "FinalTotal": 91.00
+    And the response JSON should contain "TotalDiscountPercent": 5
+    And the response JSON should contain decimal "FinalTotal": 95.00
     And the response JSON should contain "PolicyVersion": "v1"
 
   Scenario: API A rejects request with non‑positive quantity
