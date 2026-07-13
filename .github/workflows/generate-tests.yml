@@ -20,10 +20,6 @@ on:
         description: "Azure DevOps work item id (optional override; commit message AB#1234 is also detected)"
         required: false
         default: ""
-      guidance:
-        description: "Reviewer guidance: edge cases / scenarios the AI must cover (free text)"
-        required: false
-        default: ""
 
 permissions:
   contents: write
@@ -77,7 +73,6 @@ jobs:
           AZDO_PROJECT: ${{ secrets.AZDO_PROJECT }}
           AZDO_PAT: ${{ secrets.AZDO_PAT }}
           AZDO_WORK_ITEM_ID: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ado_work_item_id || '' }}
-          TESTGEN_GUIDANCE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.guidance || '' }}
           TESTGEN_MODEL_RETRIES: "3"
           TESTGEN_BACKOFF_SECONDS: "20,45,90"
         run: |

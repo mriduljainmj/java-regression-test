@@ -54,6 +54,10 @@ TEST_TIMEOUT = int(os.environ.get("TESTGEN_TEST_TIMEOUT", "900"))
 # Per-section guardrail for very large diffs/sources.
 MAX_CONTEXT_CHARS = int(os.environ.get("TESTGEN_MAX_CONTEXT_CHARS", "60000"))
 
+# Optional human guidance is read from this file at the repo root (edit it to tell
+# the agent which edge cases to cover). Empty / comments-only means "no guidance".
+GUIDANCE_FILE = "testgen-guidance.md"
+
 # .NET context shaping: changed files first, then high-signal files only.
 DOTNET_MAX_SOURCE_FILES = int(os.environ.get("TESTGEN_DOTNET_MAX_SOURCE_FILES", "24"))
 DOTNET_MAX_FILE_CHARS = int(os.environ.get("TESTGEN_DOTNET_MAX_FILE_CHARS", "8000"))
@@ -239,6 +243,23 @@ def collect_diff(state: TestGenState) -> TestGenState:
     return update
 
 
+def _read_guidance_file(repo: Path) -> str:
+    """Read optional human guidance from testgen-guidance.md at the repo root.
+
+    HTML comment blocks (the usage instructions shipped in the file) are stripped,
+    so a file that still only contains the template counts as 'no guidance'.
+    """
+    path = repo / GUIDANCE_FILE
+    if not path.is_file():
+        return ""
+    try:
+        text = path.read_text(errors="ignore")
+    except Exception:
+        return ""
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)  # drop instruction comments
+    return text.strip()
+
+
 def gather_context(state: TestGenState) -> TestGenState:
     """Read source files, glue code, existing features, and any API spec."""
     repo = Path(state["repo_path"])
@@ -305,9 +326,10 @@ def gather_context(state: TestGenState) -> TestGenState:
         )
 
     # Optional free-text guidance from a human: specific edge cases / scenarios the
-    # generated tests must cover. Comes from the CLI (--guidance) or the
-    # TESTGEN_GUIDANCE env var (used by the workflow_dispatch input in CI).
-    reviewer_guidance = (state.get("reviewer_guidance") or os.environ.get("TESTGEN_GUIDANCE", "")).strip()
+    # generated tests must cover. Comes from the CLI (--guidance) or, preferably, the
+    # testgen-guidance.md file at the repo root (the label-refine flow writes the QA
+    # comment into that file before running).
+    reviewer_guidance = (state.get("reviewer_guidance") or _read_guidance_file(repo)).strip()
     if reviewer_guidance:
         logger.info("Reviewer guidance provided (%d chars) — model must cover the named edge cases", len(reviewer_guidance))
     else:

@@ -120,3 +120,25 @@ jobs:
             dotnet-component/TestResults/dotnet-livingdoc.html
             dotnet-component/TestResults/trx-html/**
           if-no-files-found: warn
+
+      # When the suite fails on a protected branch, raise an ADO bug and assign it.
+      # Gated to push events so in-progress PR failures don't spam tickets.
+      - name: Raise ADO bug on regression failure
+        if: ${{ failure() && github.event_name == 'push' }}
+        working-directory: testgen-agent
+        env:
+          AZDO_ORG_URL: ${{ secrets.AZDO_ORG_URL }}
+          AZDO_PROJECT: ${{ secrets.AZDO_PROJECT }}
+          AZDO_PAT: ${{ secrets.AZDO_PAT }}
+          # Optional: pin every regression bug to one person (email/UPN). If unset,
+          # the agent uses the referenced ticket's assignee, then the commit author.
+          ADO_ASSIGNEE: ${{ secrets.ADO_ASSIGNEE }}
+          FAILING_COMPONENT: >-
+            ${{ (steps.changes.outputs.java == 'true' && steps.changes.outputs.dotnet == 'true') && 'java-component and dotnet-component'
+             || (steps.changes.outputs.java == 'true' && 'java-component')
+             || 'dotnet-component' }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: python3 report_regression_failure.py

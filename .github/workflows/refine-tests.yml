@@ -7,7 +7,7 @@
 #   2. QA adds the `regen-tests` label to the PR.
 #   3. This workflow reads the latest human comment + the testgen-meta marker in
 #      the PR body (base/head/project_type), reruns the agent with that comment as
-#      TESTGEN_GUIDANCE, and pushes the result to the PR branch.
+#      writes it into testgen-guidance.md, reruns, and pushes to the PR branch.
 #   4. The label is removed so it can be re-applied to trigger another round.
 #
 # Note: only works on same-repo PRs (the agent's own PRs). Fork PRs get a
@@ -111,7 +111,7 @@ jobs:
           AZDO_ORG_URL: ${{ secrets.AZDO_ORG_URL }}
           AZDO_PROJECT: ${{ secrets.AZDO_PROJECT }}
           AZDO_PAT: ${{ secrets.AZDO_PAT }}
-          TESTGEN_GUIDANCE: ${{ steps.meta.outputs.guidance }}
+          GUIDANCE: ${{ steps.meta.outputs.guidance }}
           TESTGEN_PR_BRANCH: ${{ github.event.pull_request.head.ref }}
           TESTGEN_FORCE_PROJECT_TYPE: ${{ steps.meta.outputs.ptype }}
           TESTGEN_MODEL_RETRIES: "3"
@@ -119,6 +119,9 @@ jobs:
         run: |
           git config user.name "testgen-agent"
           git config user.email "testgen-agent@users.noreply.github.com"
+          # The agent reads guidance from testgen-guidance.md — write the QA comment
+          # there for this run (transient; not committed with the generated tests).
+          printf '%s\n' "$GUIDANCE" > "$GITHUB_WORKSPACE/testgen-guidance.md"
           # Capture the agent's JSON summary (stdout); logs still stream via stderr.
           set +e
           python main.py \

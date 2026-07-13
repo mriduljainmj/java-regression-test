@@ -117,3 +117,125 @@ def fetch_work_item_context(
         lines.append("Acceptance Criteria: (missing)")
 
     return "\n".join(lines)
+
+
+def _to_html(text: str) -> str:
+    """ADO work-item fields render HTML — escape and keep line breaks."""
+    return html.escape(text or "").replace("\n", "<br>")
+
+
+def get_work_item_assignee(
+    *, org_url: str, project: str, pat: str, work_item_id: str, timeout: int = 10
+) -> str:
+    """Return the uniqueName (email/UPN) the given work item is assigned to, or ''."""
+    org_url = org_url.strip().rstrip("/")
+    project = project.strip()
+    pat = pat.strip()
+    work_item_id = str(work_item_id).strip()
+    if not (org_url and project and pat and work_item_id):
+        return ""
+
+    url = f"{org_url}/{project}/_apis/wit/workitems/{work_item_id}?api-version=7.1"
+    token = base64.b64encode(f":{pat}".encode("utf-8")).decode("ascii")
+    request = urllib.request.Request(
+        url, headers={"Authorization": f"Basic {token}", "Accept": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:  # pragma: no cover - best-effort network helper
+        return ""
+
+    assigned = (payload.get("fields", {}) or {}).get("System.AssignedTo")
+    if isinstance(assigned, dict):
+        return str(assigned.get("uniqueName") or assigned.get("displayName") or "")
+    return str(assigned or "")
+
+
+def create_work_item(
+    *,
+    org_url: str,
+    project: str,
+    pat: str,
+    title: str,
+    description: str,
+    work_item_type: str = "Bug",
+    assigned_to: str = "",
+    tags: str = "",
+    timeout: int = 15,
+) -> str:
+    """Create an ADO work item and return a human-readable result line.
+
+    Best-effort: returns a readable message on any failure instead of raising, so a
+    CI failure-handler never masks the original test failure. If the assignee cannot
+    be resolved by ADO, the item is created unassigned rather than failing outright.
+    """
+    org_url = org_url.strip().rstrip("/")
+    project = project.strip()
+    pat = pat.strip()
+    if not (org_url and project and pat):
+        return "Skipped ADO ticket creation: AZDO_ORG_URL / AZDO_PROJECT / AZDO_PAT are not all set."
+
+    import urllib.parse
+
+    wit = urllib.parse.quote("$" + work_item_type)  # e.g. "$Bug" -> "%24Bug"
+    url = f"{org_url}/{project}/_apis/wit/workitems/{wit}?api-version=7.1"
+    token = base64.b64encode(f":{pat}".encode("utf-8")).decode("ascii")
+    html_desc = _to_html(description)
+
+    def _patch(include_assignee: bool) -> bytes:
+        ops = [
+            {"op": "add", "path": "/fields/System.Title", "value": title[:255]},
+            {"op": "add", "path": "/fields/System.Description", "value": html_desc},
+        ]
+        if work_item_type.lower() == "bug":
+            ops.append({"op": "add", "path": "/fields/Microsoft.VSTS.TCM.ReproSteps", "value": html_desc})
+        if tags:
+            ops.append({"op": "add", "path": "/fields/System.Tags", "value": tags})
+        if include_assignee and assigned_to:
+            ops.append({"op": "add", "path": "/fields/System.AssignedTo", "value": assigned_to})
+        return json.dumps(ops).encode("utf-8")
+
+    def _post(body: bytes) -> dict:
+        request = urllib.request.Request(
+            url,
+            data=body,
+            method="POST",
+            headers={
+                "Authorization": f"Basic {token}",
+                "Content-Type": "application/json-patch+json",
+                "Accept": "application/json",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    try:
+        payload = _post(_patch(include_assignee=True))
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8")[:300]
+        except Exception:
+            pass
+        # A bad/unknown assignee identity is the usual cause — retry unassigned.
+        if assigned_to and exc.code in (400, 404):
+            try:
+                payload = _post(_patch(include_assignee=False))
+                wid = payload.get("id")
+                return (f"Created ADO {work_item_type} {wid} (unassigned — could not resolve "
+                        f"'{assigned_to}'): {_web_url(org_url, project, wid, payload)}")
+            except Exception as exc2:  # pragma: no cover
+                return f"Failed to create ADO work item: {exc2}"
+        return f"Failed to create ADO work item: HTTP {exc.code} {detail}"
+    except Exception as exc:  # pragma: no cover - best-effort network helper
+        return f"Failed to create ADO work item: {exc}"
+
+    wid = payload.get("id")
+    assignee_note = f" assigned to {assigned_to}" if assigned_to else " (unassigned)"
+    return f"Created ADO {work_item_type} {wid}{assignee_note}: {_web_url(org_url, project, wid, payload)}"
+
+
+def _web_url(org_url: str, project: str, wid, payload: dict) -> str:
+    link = (((payload.get("_links") or {}).get("html") or {}).get("href"))
+    return link or f"{org_url}/{project}/_workitems/edit/{wid}"
