@@ -63,8 +63,13 @@ def _after_validate(state: TestGenState) -> str:
             f"Generation failed validation after {MAX_ATTEMPTS} attempts: "
             + "; ".join(curr_errors)
         )
-    if not state["generation"].new_or_modified_features:
-        return END  # purely internal change — nothing to write
+    gen = state["generation"]
+    # A path/signature change can require updating only the step definitions (the
+    # glue that builds URLs) with no change to the Gherkin — still worth writing and
+    # opening a PR. Only truly empty generations (no features AND no glue) are the
+    # "purely internal, nothing to write" case.
+    if not gen.new_or_modified_features and not gen.new_or_modified_step_definitions:
+        return END
     return "write_features"
 
 
