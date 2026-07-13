@@ -7,8 +7,10 @@
 <style>
   :root {
     --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --border: #2a2f3a;
-    --text: #e6e9ef; --muted: #8b93a3; --accent: #4f8cff;
+    --text: #e6e9ef; --muted: #8b93a3; --faint: #626b7c; --accent: #4f8cff;
+    --accent-wash: #16233d;
     --pass: #3fb950; --fail: #f85149; --skip: #d29922; --run: #58a6ff;
+    --mono: "SF Mono","JetBrains Mono","Cascadia Code",ui-monospace,Consolas,monospace;
   }
   * { box-sizing: border-box; }
   body {
@@ -16,24 +18,122 @@
     background: var(--bg); color: var(--text);
   }
   header {
-    display: flex; align-items: center; gap: 16px; padding: 14px 22px;
+    display: flex; align-items: center; gap: 16px; padding: 12px 22px;
     background: var(--panel); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 5;
   }
-  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
   .repo { color: var(--muted); font-size: 13px; }
   .refresh { margin-left: auto; color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 8px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pass); animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
-  main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 22px; align-items: start; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-  .panel > h2 {
-    font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted);
-    margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel2);
-  }
-  .body { max-height: 78vh; overflow-y: auto; }
 
-  /* Runs */
+  /* tabs */
+  .tabs { display: flex; gap: 4px; padding: 0 22px; background: var(--panel);
+    border-bottom: 1px solid var(--border); position: sticky; top: 49px; z-index: 5; }
+  .tab {
+    appearance: none; background: none; border: 0; color: var(--muted);
+    font: inherit; font-size: 13px; font-weight: 600; padding: 12px 14px; cursor: pointer;
+    border-bottom: 2px solid transparent; letter-spacing: .2px;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .view { display: none; }
+  .view.active { display: block; }
+  .container { max-width: 1080px; margin: 0 auto; padding: 26px 22px 60px; }
+
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 12px;
+    display: inline-flex; align-items: center; gap: 9px; }
+  .eyebrow::before { content:""; width: 20px; height: 1px; background: var(--accent); opacity:.55; }
+  h2.big { font-size: clamp(1.4rem, 3vw, 2rem); margin: 0; font-weight: 750; letter-spacing: -.02em; text-wrap: balance; }
+  .lede { color: var(--muted); max-width: 62ch; margin: 14px 0 0; font-size: 1.02rem; }
+  .section { margin-top: 46px; }
+  .section > .head { margin-bottom: 20px; }
+  .section > .head p { color: var(--muted); margin: 8px 0 0; }
+
+  /* proof stats */
+  .proof { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-top: 30px; }
+  .stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .stat-card .n { font-family: var(--mono); font-size: 1.7rem; font-weight: 700; }
+  .stat-card .l { color: var(--faint); font-size: .8rem; margin-top: 6px; }
+
+  /* flow nodes */
+  .flow { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; }
+  .node { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 15px 14px; position: relative; }
+  .node .step { font-family: var(--mono); font-size: 10.5px; color: var(--accent); letter-spacing: .08em; }
+  .node h3 { font-size: .95rem; margin: 8px 0 5px; font-weight: 650; }
+  .node p { margin: 0; font-size: .82rem; color: var(--muted); }
+  .node .tag { display: block; font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 9px; }
+  .node::after { content:"→"; position:absolute; right:-9px; top:50%; transform:translateY(-50%); color:var(--accent); font-weight:700; z-index:2; }
+  .flow .node:last-child::after { display:none; }
+
+  /* capability grid */
+  .grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px;
+    display: flex; flex-direction: column; gap: 9px; transition: border-color .16s, transform .16s; }
+  .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .card .ico { width: 32px; height: 32px; border-radius: 8px; background: var(--accent-wash); color: var(--accent);
+    display: grid; place-items: center; font-size: 15px; }
+  .card h3 { font-size: 1rem; margin: 0; font-weight: 680; }
+  .card p { margin: 0; font-size: .88rem; color: var(--muted); }
+  .card .under { font-family: var(--mono); font-size: 10.5px; color: var(--faint);
+    border-top: 1px dashed var(--border); padding-top: 10px; margin-top: auto; }
+  .card .under b { color: var(--accent); font-weight: 600; }
+
+  /* outcomes */
+  .outcomes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .out { display: flex; gap: 12px; background: var(--panel); border: 1px solid var(--border);
+    border-left: 3px solid var(--pass); border-radius: 11px; padding: 15px 17px; }
+  .out .c { color: var(--pass); }
+  .out h4 { margin: 0 0 3px; font-size: .96rem; } .out p { margin: 0; font-size: .85rem; color: var(--muted); }
+
+  /* live pipeline */
+  .live-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 18px; align-items: start; }
+  @media (max-width: 900px) { .live-grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .panel > h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted);
+    margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel2); }
+  .panel .pad { padding: 16px; }
+  .runline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .runline .rt { font-weight: 600; } .runline .meta { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+
+  .stepper { list-style: none; margin: 0; padding: 8px 16px 16px; }
+  .pstep { display: flex; gap: 14px; padding: 3px 0; position: relative; }
+  .pstep .rail { display: flex; flex-direction: column; align-items: center; flex: none; width: 22px; }
+  .pstep .bullet { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border);
+    background: var(--panel); display: grid; place-items: center; font-size: 10px; color: var(--bg); z-index: 1; }
+  .pstep .line { width: 2px; flex: 1; background: var(--border); margin: 2px 0; min-height: 10px; }
+  .pstep:last-child .line { display: none; }
+  .pstep .content { padding-bottom: 10px; }
+  .pstep .nm { font-size: .9rem; }
+  .pstep .st { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .pstep.done .bullet { background: var(--pass); border-color: var(--pass); }
+  .pstep.fail .bullet { background: var(--fail); border-color: var(--fail); }
+  .pstep.skip .bullet { background: var(--skip); border-color: var(--skip); }
+  .pstep.active .bullet { background: var(--run); border-color: var(--run); box-shadow: 0 0 0 4px rgba(88,166,255,.2); animation: pulse 1.4s infinite; }
+  .pstep.active .nm { color: var(--text); font-weight: 600; }
+  .pstep.pending .nm, .pstep.pending .st { color: var(--faint); }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; padding: 10px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+  /* system map chips */
+  .map { display: flex; flex-direction: column; gap: 10px; }
+  .maprow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .chip { font-size: 12px; padding: 7px 11px; border-radius: 9px; border: 1px solid var(--border);
+    background: var(--panel2); display: inline-flex; align-items: center; gap: 7px; }
+  .chip.k { border-color: var(--accent); color: var(--text); }
+  .chip.warn { border-color: var(--skip); }
+  .arw { color: var(--faint); }
+  .maplabel { font-family: var(--mono); font-size: 10px; color: var(--faint); text-transform: uppercase; letter-spacing: .1em; margin-top: 6px; }
+
+  /* Monitor (original) */
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 22px 40px; align-items: start; max-width: 1200px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .body { max-height: 74vh; overflow-y: auto; }
   .run { border-bottom: 1px solid var(--border); }
   .run-head { display: flex; align-items: center; gap: 10px; padding: 11px 16px; cursor: pointer; }
   .run-head:hover { background: var(--panel2); }
@@ -52,11 +152,9 @@
   .i-pass { color: var(--pass); } .i-fail { color: var(--fail); }
   .i-run { color: var(--run); } .i-skip { color: var(--muted); }
   .dur { margin-left: auto; font-size: 11px; color: var(--muted); }
-
-  /* Tests */
   .summary { display: flex; gap: 18px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
-  .stat { display: flex; align-items: baseline; gap: 6px; }
-  .stat b { font-size: 20px; } .stat span { color: var(--muted); font-size: 12px; }
+  .sstat { display: flex; align-items: baseline; gap: 6px; }
+  .sstat b { font-size: 20px; } .sstat span { color: var(--muted); font-size: 12px; }
   .source { padding: 6px 16px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--border); }
   .feature { border-bottom: 1px solid var(--border); }
   .feature > h3 { margin: 0; padding: 10px 16px; font-size: 13px; background: var(--panel2); }
@@ -65,31 +163,159 @@
   .scn-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .scn .err { color: var(--fail); font-size: 11px; margin-left: 6px; }
   .empty { padding: 26px; text-align: center; color: var(--muted); }
-  .empty code { background: var(--panel2); padding: 2px 6px; border-radius: 4px; }
+  .empty code, .lede code { background: var(--panel2); padding: 2px 6px; border-radius: 4px; font-family: var(--mono); font-size: .85em; }
   a { color: var(--accent); text-decoration: none; }
+  @media (max-width: 780px) { .proof,.flow,.grid,.outcomes { grid-template-columns: 1fr 1fr; } .flow .node::after{display:none;} }
+  @media (max-width: 520px) { .proof,.flow,.grid,.outcomes { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <header>
-  <h1>🧪 Test-Gen Pipeline</h1>
+  <h1>🛡️ Regression Quality Platform</h1>
   <span class="repo" id="repo">…</span>
   <span class="refresh"><span class="dot"></span> auto-refresh 5s</span>
 </header>
-<main>
-  <section class="panel">
-    <h2>GitHub Actions — pipeline steps</h2>
-    <div class="body" id="runs"><div class="empty">loading…</div></div>
-  </section>
-  <section class="panel">
-    <h2>Cucumber regression — scenarios</h2>
-    <div class="body" id="tests"><div class="empty">loading…</div></div>
-  </section>
-</main>
+<nav class="tabs">
+  <button class="tab active" data-tab="overview">Overview</button>
+  <button class="tab" data-tab="pipeline">Live Pipeline</button>
+  <button class="tab" data-tab="monitor">Monitor</button>
+</nav>
+
+<!-- ============================ OVERVIEW ============================ -->
+<div class="view active" id="view-overview">
+  <div class="container">
+    <p class="eyebrow">Quality Engineering · Automated Regression</p>
+    <h2 class="big">Regression tests that write and check themselves — while your team ships.</h2>
+    <p class="lede">Every time a developer changes the API, an AI quality engineer reads the change, writes the
+      matching regression tests, runs them to prove they work, and opens a pull request for your team to approve —
+      across Java and .NET, with no test scripts written by hand.</p>
+
+    <div class="proof">
+      <div class="stat-card"><div class="n">2</div><div class="l">Stacks supported — Java &amp; .NET, auto-detected</div></div>
+      <div class="stat-card"><div class="n">100%</div><div class="l">Generated tests reviewed by a human before merge</div></div>
+      <div class="stat-card"><div class="n">3×</div><div class="l">Self-correction rounds before anyone looks</div></div>
+      <div class="stat-card"><div class="n">24/7</div><div class="l">Runs on every change — no scheduling</div></div>
+    </div>
+
+    <div class="section">
+      <div class="head"><p class="eyebrow">How it works · end to end</p>
+        <h2 class="big" style="font-size:1.5rem">From a code change to reviewed tests.</h2>
+        <p>A five-stage line runs on every change — and it <em>proves the tests pass</em> before a person looks.</p></div>
+      <div class="flow">
+        <div class="node"><span class="step">STAGE 1</span><h3>Understand the change</h3><p>Reads the code diff and identifies what behaviour changed.</p><span class="tag">Java / .NET auto-detect</span></div>
+        <div class="node"><span class="step">STAGE 2</span><h3>Gather context</h3><p>Studies source, existing tests and requirement tickets.</p><span class="tag">+ ADO work item</span></div>
+        <div class="node"><span class="step">STAGE 3</span><h3>Write the tests</h3><p>Business-readable scenarios plus the automation behind them.</p><span class="tag">Cucumber / SpecFlow</span></div>
+        <div class="node"><span class="step">STAGE 4</span><h3>Prove they pass</h3><p>Runs them; on failure, rewrites — up to three times.</p><span class="tag">Self-correcting</span></div>
+        <div class="node"><span class="step">STAGE 5</span><h3>Raise for review</h3><p>Opens a pull request with a clear pass/fail status.</p><span class="tag">Human sign-off</span></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="head"><p class="eyebrow">What it does for you</p>
+        <h2 class="big" style="font-size:1.5rem">Every capability, in plain terms.</h2></div>
+      <div class="grid">
+        <div class="card"><span class="ico">◆</span><h3>Tests write themselves</h3><p>Each change is matched with fresh regression tests — no manual authoring, on either stack.</p><span class="under">Java Cucumber &amp; .NET SpecFlow, chosen automatically</span></div>
+        <div class="card"><span class="ico">✓</span><h3>Quality is verified</h3><p>The system runs the tests it writes and fixes its own mistakes before anything reaches a person.</p><span class="under">Runs the suite, self-corrects up to <b>3×</b></span></div>
+        <div class="card"><span class="ico">⦿</span><h3>A human always signs off</h3><p>Nothing merges on its own. Every change arrives as a pull request to review.</p><span class="under"><b>Pull-request gate</b> + independent re-check</span></div>
+        <div class="card"><span class="ico">❝</span><h3>Steer it in plain English</h3><p>A reviewer comments the change they want and applies a label; tests are regenerated to match.</p><span class="under">Comment + <b>regen-tests</b> label</span></div>
+        <div class="card"><span class="ico">▤</span><h3>Your standards, encoded once</h3><p>Drop must-test rules into one instructions file; every run honours them.</p><span class="under"><b>testgen-guidance</b> file</span></div>
+        <div class="card"><span class="ico">⇄</span><h3>Requirements stay connected</h3><p>Work-item detail flows into the tests, so coverage traces back to the requirement.</p><span class="under"><b>Azure DevOps</b> ticket context</span></div>
+        <div class="card"><span class="ico">!</span><h3>Failures raise themselves</h3><p>When a regression breaks, a defect ticket is created and assigned to the right owner.</p><span class="under">Auto <b>ADO bug</b>, auto-assigned</span></div>
+        <div class="card"><span class="ico">◫</span><h3>A living map of the system</h3><p>An always-current overview of every endpoint, rule and area of coverage.</p><span class="under">Auto-maintained <b>knowledge base</b></span></div>
+        <div class="card"><span class="ico">▦</span><h3>Evidence for every run</h3><p>Readable test reports attached to each run for audit and sign-off.</p><span class="under"><b>LivingDoc / Cucumber</b> reports</span></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="head"><p class="eyebrow">Why it matters</p><h2 class="big" style="font-size:1.5rem">What the business gets.</h2></div>
+      <div class="outcomes">
+        <div class="out"><span class="c">✔</span><div><h4>Ship faster, safely</h4><p>Coverage keeps pace with development instead of lagging behind it.</p></div></div>
+        <div class="out"><span class="c">✔</span><div><h4>Lower QA cost</h4><p>The slow, specialist work of writing and maintaining tests is automated away.</p></div></div>
+        <div class="out"><span class="c">✔</span><div><h4>Fewer escaped defects</h4><p>Tests are proven to pass and reviewed by a person — two gates before shipping.</p></div></div>
+        <div class="out"><span class="c">✔</span><div><h4>Full traceability</h4><p>Requirements in; tickets, reports and a living map out — every change accounted for.</p></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ LIVE PIPELINE ============================ -->
+<div class="view" id="view-pipeline">
+  <div class="container">
+    <p class="eyebrow">Live · where is it right now</p>
+    <h2 class="big" style="font-size:1.6rem">Watch the pipeline work, step by step.</h2>
+    <p class="lede">The most recent run, with the step currently executing highlighted. This updates every 5 seconds.</p>
+
+    <div class="live-grid" style="margin-top:26px">
+      <section class="panel">
+        <h2>Current run — step by step</h2>
+        <div id="pipeline-body"><div class="empty">loading…</div></div>
+        <div class="legend">
+          <span><i style="background:var(--run)"></i> running</span>
+          <span><i style="background:var(--pass)"></i> done</span>
+          <span><i style="background:var(--fail)"></i> failed</span>
+          <span><i style="background:var(--skip)"></i> skipped</span>
+          <span><i style="background:var(--border)"></i> pending</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>The system at a glance</h2>
+        <div class="pad map">
+          <div class="maplabel">Trigger → delivery</div>
+          <div class="maprow">
+            <span class="chip">Developer pushes code</span><span class="arw">→</span>
+            <span class="chip k">Generate tests</span><span class="arw">→</span>
+            <span class="chip">Pull request</span><span class="arw">→</span>
+            <span class="chip">Human review</span>
+          </div>
+          <div class="maplabel">Safety net</div>
+          <div class="maprow">
+            <span class="chip k">Regression suite</span><span class="arw">→</span>
+            <span class="chip">Pass ✓ merge</span>
+            <span class="arw">/</span>
+            <span class="chip warn">Fail → auto defect ticket</span>
+          </div>
+          <div class="maplabel">Reviewer loop</div>
+          <div class="maprow">
+            <span class="chip">Comment</span><span class="arw">→</span>
+            <span class="chip k">regen-tests label</span><span class="arw">→</span>
+            <span class="chip">Tests rebuilt</span><span class="arw">↻</span>
+            <span class="chip">Same PR updates</span>
+          </div>
+          <div class="maplabel">Inside “Generate tests” (the AI agent)</div>
+          <div class="maprow">
+            <span class="chip">Understand</span><span class="arw">→</span>
+            <span class="chip">Gather context</span><span class="arw">→</span>
+            <span class="chip">Write</span><span class="arw">→</span>
+            <span class="chip">Validate</span><span class="arw">→</span>
+            <span class="chip">Run &amp; self-correct</span><span class="arw">→</span>
+            <span class="chip">Open PR</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ MONITOR (original) ============================ -->
+<div class="view" id="view-monitor">
+  <main>
+    <section class="panel">
+      <h2>GitHub Actions — pipeline steps</h2>
+      <div class="body" id="runs"><div class="empty">loading…</div></div>
+    </section>
+    <section class="panel">
+      <h2>Cucumber regression — scenarios</h2>
+      <div class="body" id="tests"><div class="empty">loading…</div></div>
+    </section>
+  </main>
+</div>
 
 <script>
 const $ = (s) => document.querySelector(s);
-let openRuns = new Set();           // remember which runs are expanded
-let activeResultsRun = null;        // which run's results are shown on the right
+let openRuns = new Set();
+let activeResultsRun = null;
+let activeTab = "overview";
 
 const ICON = { passed:["i-pass","✓"], success:["i-pass","✓"], completed:["i-pass","✓"],
   failure:["i-fail","✕"], failed:["i-fail","✕"], in_progress:["i-run","●"],
@@ -103,36 +329,84 @@ function badge(run) {
   return `<span class="badge ${cls}">${c}</span>`;
 }
 const fmtTime = (a,b) => (a&&b) ? Math.round((new Date(b)-new Date(a))/1000)+"s" : "";
-
+const esc = (s) => (s||"").replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function get(url) { const r = await fetch(url); return r.json(); }
+
+/* ---- tabs ---- */
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  activeTab = t.dataset.tab;
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x === t));
+  document.querySelectorAll(".view").forEach(v => v.classList.toggle("active", v.id === "view-"+activeTab));
+  tick();
+});
 
 async function loadConfig() {
   const c = await get("/api/config");
   $("#repo").textContent = c.repo + (c.has_token ? "" : "  · no GITHUB_TOKEN");
 }
 
+/* ---- live pipeline ---- */
+function stepClass(s, idx, current) {
+  if (s.status === "completed") {
+    if (s.conclusion === "failure") return "fail";
+    if (s.conclusion === "skipped") return "skip";
+    return "done";
+  }
+  if (s.status === "in_progress" || idx === current) return "active";
+  return "pending";
+}
+function stepMark(cls) {
+  return cls === "done" ? "✓" : cls === "fail" ? "✕" : cls === "skip" ? "–" : "";
+}
+async function loadPipeline() {
+  const el = $("#pipeline-body");
+  const data = await get("/api/pipeline");
+  if (data.needs_token) { el.innerHTML = `<div class="empty">Set <code>GITHUB_TOKEN</code> and restart to watch live runs.<br>The Overview tab needs no setup.</div>`; return; }
+  if (data.error) { el.innerHTML = `<div class="empty">${esc(data.error)}</div>`; return; }
+  if (!data.run) { el.innerHTML = `<div class="empty">No workflow runs yet.</div>`; return; }
+  const r = data.run;
+  const running = r.status !== "completed";
+  const head = `<div class="runline">
+      <span class="rt">${esc(r.workflow||r.name)}</span> ${badge(r)}
+      <span class="meta">#${r.run_number} · ${esc(r.branch||"")} · ${esc(r.event||"")}</span>
+      <span class="meta" style="margin-left:auto"><a href="${r.html_url}" target="_blank">open on GitHub ↗</a></span>
+    </div>`;
+  if (!data.steps.length) {
+    el.innerHTML = head + `<div class="empty">${running ? "Run is queued — steps will appear as it starts." : "No step detail available."}</div>`;
+    return;
+  }
+  const steps = data.steps.map((s, i) => {
+    const cls = stepClass(s, i, data.current);
+    const label = s.status === "completed" ? (s.conclusion||"done")
+      : (i === data.current ? "running now" : s.status || "pending");
+    return `<li class="pstep ${cls}">
+        <span class="rail"><span class="bullet">${stepMark(cls)}</span><span class="line"></span></span>
+        <span class="content"><div class="nm">${esc(s.name)}</div><div class="st">${esc(label)} · ${fmtTime(s.started_at,s.completed_at)}</div></span>
+      </li>`;
+  }).join("");
+  el.innerHTML = head + `<ul class="stepper">${steps}</ul>`;
+}
+
+/* ---- monitor: runs ---- */
 async function loadRuns() {
   const data = await get("/api/runs");
   const el = $("#runs");
   if (data.needs_token) {
     el.innerHTML = `<div class="empty">Set <code>GITHUB_TOKEN</code> and restart to see live pipeline runs.<br>
-      The test pane on the right works from the local report regardless.</div>`;
-    return;
+      The test pane on the right works from the local report regardless.</div>`; return;
   }
-  if (data.error) { el.innerHTML = `<div class="empty">${data.error}</div>`; return; }
+  if (data.error) { el.innerHTML = `<div class="empty">${esc(data.error)}</div>`; return; }
   if (!data.length) { el.innerHTML = `<div class="empty">No workflow runs yet.</div>`; return; }
-
   el.innerHTML = data.map(r => `
     <div class="run ${openRuns.has(r.id)?'open':''}" data-id="${r.id}">
       <div class="run-head">
-        <span class="run-title">${r.workflow||r.name}</span>
+        <span class="run-title">${esc(r.workflow||r.name)}</span>
         ${badge(r)}
-        <span class="run-meta">#${r.run_number} · ${r.branch} · ${r.event}
+        <span class="run-meta">#${r.run_number} · ${esc(r.branch)} · ${esc(r.event)}
           · <a href="${r.html_url}" target="_blank">GitHub ↗</a></span>
       </div>
       <div class="jobs" id="jobs-${r.id}">${openRuns.has(r.id)?'loading…':''}</div>
     </div>`).join("");
-
   el.querySelectorAll(".run-head").forEach(h => h.onclick = (e) => {
     if (e.target.tagName === "A") return;
     const run = h.parentElement, id = +run.dataset.id;
@@ -140,64 +414,57 @@ async function loadRuns() {
     if (run.classList.contains("open")) { openRuns.add(id); loadJobs(id); showResults(id); }
     else openRuns.delete(id);
   });
-  // keep expanded runs fresh
   openRuns.forEach(id => { if (el.querySelector(`[data-id="${id}"]`)) loadJobs(id); });
 }
-
 async function loadJobs(runId) {
   const data = await get(`/api/runs/${runId}/jobs`);
   const box = $(`#jobs-${runId}`); if (!box) return;
-  if (data.error) { box.innerHTML = `<div class="step">${data.error}</div>`; return; }
+  if (data.error) { box.innerHTML = `<div class="step">${esc(data.error)}</div>`; return; }
   box.innerHTML = data.map(j => {
     const [jc, ji] = ico(j.conclusion || j.status);
-    return `<div class="job-name"><span class="ico ${jc}">${ji}</span> ${j.name}
+    return `<div class="job-name"><span class="ico ${jc}">${ji}</span> ${esc(j.name)}
       <span class="dur">${fmtTime(j.started_at,j.completed_at)}</span></div>` +
       j.steps.map(s => {
         const [c,i] = ico(s.conclusion || s.status);
-        return `<div class="step"><span class="ico ${c}">${i}</span>${s.name}
+        return `<div class="step"><span class="ico ${c}">${i}</span>${esc(s.name)}
           <span class="dur">${fmtTime(s.started_at,s.completed_at)}</span></div>`;
       }).join("");
   }).join("");
 }
-
 function renderResults(data) {
   const el = $("#tests");
-  if (data.error) { el.innerHTML = `<div class="empty">${data.error}</div>`; return; }
+  if (data.error) { el.innerHTML = `<div class="empty">${esc(data.error)}</div>`; return; }
   if (!data.total) {
-    el.innerHTML = `<div class="empty">No scenarios. Run <code>mvn -f java-component/pom.xml verify</code>
-      to generate the local report.</div>`; return;
+    el.innerHTML = `<div class="empty">No scenarios. Run <code>mvn -f java-component/pom.xml verify</code> to generate the local report.</div>`; return;
   }
   const t = data.totals;
   el.innerHTML = `
     <div class="summary">
-      <div class="stat"><b style="color:var(--pass)">${t.passed||0}</b><span>passed</span></div>
-      <div class="stat"><b style="color:var(--fail)">${t.failed||0}</b><span>failed</span></div>
-      <div class="stat"><b style="color:var(--skip)">${t.skipped||0}</b><span>skipped</span></div>
-      <div class="stat"><b>${data.total}</b><span>total</span></div>
+      <div class="sstat"><b style="color:var(--pass)">${t.passed||0}</b><span>passed</span></div>
+      <div class="sstat"><b style="color:var(--fail)">${t.failed||0}</b><span>failed</span></div>
+      <div class="sstat"><b style="color:var(--skip)">${t.skipped||0}</b><span>skipped</span></div>
+      <div class="sstat"><b>${data.total}</b><span>total</span></div>
     </div>
-    <div class="source">source: ${data.source||""}</div>` +
+    <div class="source">source: ${esc(data.source||"")}</div>` +
     data.features.map(f => `
       <div class="feature">
-        <h3>${f.name}</h3>
+        <h3>${esc(f.name)}</h3>
         ${f.scenarios.map(s => { const [c,i] = ico(s.status); return `
           <div class="scn">
             <span class="ico ${c}">${i}</span>
-            <span class="scn-name">${s.name}
-              ${s.failed_step?`<span class="err">↳ ${s.failed_step}</span>`:''}</span>
+            <span class="scn-name">${esc(s.name)}
+              ${s.failed_step?`<span class="err">↳ ${esc(s.failed_step)}</span>`:''}</span>
             <span class="dur">${s.duration_ms}ms</span>
           </div>`; }).join("")}
       </div>`).join("");
 }
+async function showResults(runId) { activeResultsRun = runId; renderResults(await get(`/api/runs/${runId}/results`)); }
+async function loadLocalResults() { if (activeResultsRun === null) renderResults(await get("/api/results")); }
 
-async function showResults(runId) {        // results for a specific run (artifact)
-  activeResultsRun = runId;
-  renderResults(await get(`/api/runs/${runId}/results`));
+async function tick() {
+  if (activeTab === "pipeline") await loadPipeline();
+  else if (activeTab === "monitor") { await loadRuns(); await loadLocalResults(); }
 }
-async function loadLocalResults() {         // default view: local report
-  if (activeResultsRun === null) renderResults(await get("/api/results"));
-}
-
-async function tick() { await loadRuns(); await loadLocalResults(); }
 
 loadConfig();
 tick();

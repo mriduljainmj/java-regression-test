@@ -103,6 +103,30 @@ def run_jobs(run_id: int):
     return jobs
 
 
+def latest_pipeline():
+    """The most recent run (preferring one still in progress) flattened into an
+    ordered step list, with the index of the step currently executing — powers the
+    'where is it right now' live view."""
+    runs = list_runs(limit=12)
+    if not runs:
+        return {"run": None, "steps": [], "current": None}
+    run = next((r for r in runs if r.get("status") != "completed"), runs[0])
+    steps = []
+    for j in run_jobs(run["id"]):
+        for s in j.get("steps", []):
+            steps.append({
+                "name": s.get("name"),
+                "status": s.get("status"),          # queued | in_progress | completed
+                "conclusion": s.get("conclusion"),  # success | failure | skipped | ...
+                "started_at": s.get("started_at"),
+                "completed_at": s.get("completed_at"),
+            })
+    current = next((i for i, s in enumerate(steps) if s.get("status") == "in_progress"), None)
+    if current is None and run.get("status") != "completed":
+        current = next((i for i, s in enumerate(steps) if s.get("status") != "completed"), None)
+    return {"run": run, "steps": steps, "current": current}
+
+
 def run_cucumber_artifact(run_id: int):
     """Download + parse the cucumber-report artifact for a run, if present."""
     arts = _gh(f"/repos/{REPO}/actions/runs/{run_id}/artifacts")
@@ -220,6 +244,9 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/runs":
             return self._json_safe(list_runs)
+
+        if path == "/api/pipeline":
+            return self._json_safe(latest_pipeline)
 
         if path.startswith("/api/runs/") and path.endswith("/jobs"):
             run_id = int(path.split("/")[3])

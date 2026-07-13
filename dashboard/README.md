@@ -1,10 +1,15 @@
 # Pipeline Dashboard
 
-A single-screen view that merges the two halves of the pipeline:
+A single-screen app with three tabs:
 
-- **Left** — GitHub Actions runs → jobs → steps, with live status and timing.
-- **Right** — Cucumber scenarios, grouped by feature, green/red with durations
-  and the failing step when one fails.
+- **Overview** — a client-ready, business-language walkthrough of what the platform
+  does (value proposition, the 5-stage flow, every capability, and business outcomes).
+  Works with **zero setup** — no token or local report needed.
+- **Live Pipeline** — "where is it right now": the most recent workflow run rendered as
+  a step-by-step timeline with the currently-executing step highlighted, plus a
+  system-at-a-glance infographic of the whole flow. Needs `GITHUB_TOKEN`.
+- **Monitor** — the detailed view: GitHub Actions runs → jobs → steps on the left,
+  Cucumber scenarios (grouped by feature, green/red with durations) on the right.
 
 Stdlib-only Python backend (no `pip install`) + one self-contained HTML page.
 Auto-refreshes every 5 seconds.
@@ -36,6 +41,7 @@ browser (index.html, polls every 5s)
         ▼
 server.py  ──/api/runs──────────▶ GitHub Actions API (runs)
            ──/api/runs/{id}/jobs▶ GitHub Actions API (jobs + steps)
+           ──/api/pipeline─────────▶ latest run flattened to steps + the active one
            ──/api/runs/{id}/results─▶ download cucumber artifact → parse
            ──/api/results──────────▶ local cucumber-report.json (fallback)
 ```
