@@ -24,6 +24,7 @@ import io
 import zipfile
 import urllib.request
 import urllib.error
+import urllib.parse
 import socket
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -103,14 +104,22 @@ def run_jobs(run_id: int):
     return jobs
 
 
-def latest_pipeline():
-    """The most recent run (preferring one still in progress) flattened into an
-    ordered step list, with the index of the step currently executing — powers the
-    'where is it right now' live view."""
-    runs = list_runs(limit=12)
+def latest_pipeline(run_id=None):
+    """A run flattened into an ordered step list, with the index of the step
+    currently executing. Also returns the recent-run list so the UI can offer a
+    picker (several workflows run at once). Pass run_id to inspect a specific run;
+    otherwise the newest in-progress run (else the most recent) is chosen."""
+    runs = list_runs(limit=15)
     if not runs:
-        return {"run": None, "steps": [], "current": None}
-    run = next((r for r in runs if r.get("status") != "completed"), runs[0])
+        return {"run": None, "steps": [], "current": None, "runs": []}
+    if run_id is not None:
+        run = next((r for r in runs if r.get("id") == run_id), None)
+        if run is None:  # older than the window — synthesize a minimal header
+            run = {"id": run_id, "workflow": f"run {run_id}", "name": f"run {run_id}",
+                   "status": None, "conclusion": None, "run_number": "", "branch": "",
+                   "event": "", "html_url": f"https://github.com/{REPO}/actions/runs/{run_id}"}
+    else:
+        run = next((r for r in runs if r.get("status") != "completed"), runs[0])
     steps = []
     for j in run_jobs(run["id"]):
         for s in j.get("steps", []):
@@ -124,7 +133,7 @@ def latest_pipeline():
     current = next((i for i, s in enumerate(steps) if s.get("status") == "in_progress"), None)
     if current is None and run.get("status") != "completed":
         current = next((i for i, s in enumerate(steps) if s.get("status") != "completed"), None)
-    return {"run": run, "steps": steps, "current": current}
+    return {"run": run, "steps": steps, "current": current, "runs": runs}
 
 
 def run_cucumber_artifact(run_id: int):
@@ -246,7 +255,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json_safe(list_runs)
 
         if path == "/api/pipeline":
-            return self._json_safe(latest_pipeline)
+            qs = urllib.parse.parse_qs(self.path.partition("?")[2])
+            rid = qs.get("run", [None])[0]
+            run_id = int(rid) if rid and rid.isdigit() else None
+            return self._json_safe(lambda: latest_pipeline(run_id))
 
         if path.startswith("/api/runs/") and path.endswith("/jobs"):
             run_id = int(path.split("/")[3])

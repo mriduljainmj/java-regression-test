@@ -129,6 +129,28 @@
   .chip.warn { border-color: var(--skip); }
   .arw { color: var(--faint); }
   .maplabel { font-family: var(--mono); font-size: 10px; color: var(--faint); text-transform: uppercase; letter-spacing: .1em; margin-top: 6px; }
+  .chip[data-stage] { transition: background .2s, border-color .2s, box-shadow .2s, color .2s; }
+  .chip.chip-active { border-color: var(--accent); background: var(--accent); color: #fff; box-shadow: 0 0 0 3px rgba(79,140,255,.22); }
+  .chip.chip-active.running { animation: pulse 1.4s infinite; }
+  .chip.chip-active.failnow { border-color: var(--fail); background: var(--fail); box-shadow: 0 0 0 3px rgba(248,81,73,.22); }
+  .chip.chip-active.passnow { border-color: var(--pass); background: var(--pass); box-shadow: 0 0 0 3px rgba(63,185,80,.22); }
+
+  /* run picker */
+  .run-picker { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 14px; margin-top: 22px; }
+  .rchip { flex: none; cursor: pointer; border: 1px solid var(--border); background: var(--panel);
+    border-radius: 10px; padding: 9px 12px; display: flex; align-items: center; gap: 9px; min-width: 150px; }
+  .rchip:hover { border-color: var(--muted); }
+  .rchip.sel { border-color: var(--accent); background: var(--accent-wash); }
+  .rchip .rdot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .rchip .rn { font-size: 12.5px; font-weight: 600; }
+  .rchip .rmeta { font-family: var(--mono); font-size: 10px; color: var(--faint); }
+  .rchip .live { animation: pulse 1.4s infinite; }
+
+  /* floating step tooltip */
+  #floating-tip { position: fixed; display: none; max-width: 300px; z-index: 200; pointer-events: none;
+    background: #0b0e13; color: var(--text); border: 1px solid var(--accent); border-radius: 8px;
+    padding: 9px 11px; font-size: 12px; line-height: 1.45; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+  .pstep { cursor: default; }
 
   /* Monitor (original) */
   main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 22px 40px; align-items: start; max-width: 1200px; margin: 0 auto; }
@@ -243,9 +265,12 @@
   <div class="container">
     <p class="eyebrow">Live · where is it right now</p>
     <h2 class="big" style="font-size:1.6rem">Watch the pipeline work, step by step.</h2>
-    <p class="lede">The most recent run, with the step currently executing highlighted. This updates every 5 seconds.</p>
+    <p class="lede">Several workflows can run at once — pick one below to follow it. The step executing right now is
+      highlighted, hover any step for what it does, and the map on the right tracks the stage it's in. Updates every 5s.</p>
 
-    <div class="live-grid" style="margin-top:26px">
+    <div class="run-picker" id="run-picker"></div>
+
+    <div class="live-grid">
       <section class="panel">
         <h2>Current run — step by step</h2>
         <div id="pipeline-body"><div class="empty">loading…</div></div>
@@ -260,36 +285,40 @@
 
       <section class="panel">
         <h2>The system at a glance</h2>
-        <div class="pad map">
+        <div class="pad map" id="system-map">
           <div class="maplabel">Trigger → delivery</div>
           <div class="maprow">
-            <span class="chip">Developer pushes code</span><span class="arw">→</span>
-            <span class="chip k">Generate tests</span><span class="arw">→</span>
-            <span class="chip">Pull request</span><span class="arw">→</span>
-            <span class="chip">Human review</span>
+            <span class="chip" data-stage="push">Developer pushes code</span><span class="arw">→</span>
+            <span class="chip" data-stage="generate">Generate tests</span><span class="arw">→</span>
+            <span class="chip" data-stage="pr">Pull request</span><span class="arw">→</span>
+            <span class="chip" data-stage="review">Human review</span>
           </div>
           <div class="maplabel">Safety net</div>
           <div class="maprow">
-            <span class="chip k">Regression suite</span><span class="arw">→</span>
-            <span class="chip">Pass ✓ merge</span>
+            <span class="chip" data-stage="regression">Regression suite</span><span class="arw">→</span>
+            <span class="chip" data-stage="pass">Pass ✓ merge</span>
             <span class="arw">/</span>
-            <span class="chip warn">Fail → auto defect ticket</span>
+            <span class="chip warn" data-stage="fail">Fail → auto defect ticket</span>
           </div>
           <div class="maplabel">Reviewer loop</div>
           <div class="maprow">
-            <span class="chip">Comment</span><span class="arw">→</span>
-            <span class="chip k">regen-tests label</span><span class="arw">→</span>
-            <span class="chip">Tests rebuilt</span><span class="arw">↻</span>
-            <span class="chip">Same PR updates</span>
+            <span class="chip" data-stage="refine">Comment</span><span class="arw">→</span>
+            <span class="chip" data-stage="refine">regen-tests label</span><span class="arw">→</span>
+            <span class="chip" data-stage="refine">Tests rebuilt</span><span class="arw">↻</span>
+            <span class="chip" data-stage="refine">Same PR updates</span>
+          </div>
+          <div class="maplabel">Knowledge base</div>
+          <div class="maprow">
+            <span class="chip" data-stage="mindmap">Living system map refreshed</span>
           </div>
           <div class="maplabel">Inside “Generate tests” (the AI agent)</div>
           <div class="maprow">
-            <span class="chip">Understand</span><span class="arw">→</span>
-            <span class="chip">Gather context</span><span class="arw">→</span>
-            <span class="chip">Write</span><span class="arw">→</span>
-            <span class="chip">Validate</span><span class="arw">→</span>
-            <span class="chip">Run &amp; self-correct</span><span class="arw">→</span>
-            <span class="chip">Open PR</span>
+            <span class="chip" data-stage="generate">Understand</span><span class="arw">→</span>
+            <span class="chip" data-stage="generate">Gather context</span><span class="arw">→</span>
+            <span class="chip" data-stage="generate">Write</span><span class="arw">→</span>
+            <span class="chip" data-stage="generate">Validate</span><span class="arw">→</span>
+            <span class="chip" data-stage="generate">Run &amp; self-correct</span><span class="arw">→</span>
+            <span class="chip" data-stage="generate">Open PR</span>
           </div>
         </div>
       </section>
@@ -346,6 +375,8 @@ async function loadConfig() {
 }
 
 /* ---- live pipeline ---- */
+let selectedRunId = null;
+
 function stepClass(s, idx, current) {
   if (s.status === "completed") {
     if (s.conclusion === "failure") return "fail";
@@ -358,13 +389,108 @@ function stepClass(s, idx, current) {
 function stepMark(cls) {
   return cls === "done" ? "✓" : cls === "fail" ? "✕" : cls === "skip" ? "–" : "";
 }
+function shortWf(w) {
+  const s = (w||"").toLowerCase();
+  if (s.includes("generate")) return "Generate tests";
+  if (s.includes("regression") || s.includes("cucumber")) return "Regression";
+  if (s.includes("refine")) return "Refine (QA)";
+  if (s.includes("mindmap") || s.includes("project")) return "Knowledge base";
+  return w || "Workflow";
+}
+function describeStep(name) {
+  const n = (name||"").toLowerCase();
+  const map = [
+    ["set up job", "GitHub prepares the runner (VM), checks permissions and mounts the workspace."],
+    ["checkout", "Clones the repository at the exact commit being built."],
+    ["paths-filter", "Detects which component changed (Java vs .NET) so only the affected suite runs."],
+    ["setup-java", "Installs the Java 17 JDK and caches Maven dependencies."],
+    ["setup-dotnet", "Installs the .NET 9 SDK."],
+    ["setup-python", "Installs Python to run the AI agent."],
+    ["install agent", "Installs the AI agent’s Python libraries."],
+    ["pip install", "Installs Python dependencies."],
+    ["clean", "Deletes stale build output so old artifacts can’t pollute the run."],
+    ["generate cucumber", "The AI agent reads the diff, writes tests, runs & self-corrects them, then opens a PR."],
+    ["regenerate", "Re-runs the agent using the QA reviewer’s comment as guidance."],
+    ["generate", "The AI agent generates and verifies the regression tests."],
+    ["java regression", "Runs the Java Cucumber regression suite (mvn verify)."],
+    [".net regression", "Runs the .NET SpecFlow regression suite (dotnet test)."],
+    ["parse metadata", "Reads the PR’s hidden marker (base/head) and the latest QA comment."],
+    ["guard", "Checks the required inputs are present before running."],
+    ["comment the outcome", "Posts a summary of the refine run back on the PR."],
+    ["raise ado", "Creates and assigns an Azure DevOps defect ticket for the failure."],
+    ["livingdoc", "Builds a human-readable BDD report from the test results."],
+    ["upload", "Publishes the test report as a downloadable artifact."],
+    ["project.md", "Refreshes the living knowledge-base document."],
+    ["mindmap", "Refreshes the living knowledge-base document."],
+    ["remove the label", "Clears the regen-tests label so it can be re-applied for another round."],
+    ["push", "Pushes the update back to the branch."],
+    ["configure git", "Sets the bot’s git identity for its commits."],
+    ["changed files", "Lists the files changed in this push."],
+    ["post ", "Automatic cleanup GitHub runs after the job (caches, checkout)."],
+    ["complete job", "Finalises the run and reports overall status."],
+  ];
+  for (const [k, d] of map) if (n.includes(k)) return d;
+  return "A step in this workflow.";
+}
+
+let tipEl;
+function showTip(e) {
+  const d = e.currentTarget.dataset.desc; if (!d) return;
+  if (!tipEl) { tipEl = document.createElement("div"); tipEl.id = "floating-tip"; document.body.appendChild(tipEl); }
+  tipEl.textContent = d; tipEl.style.display = "block";
+  const r = e.currentTarget.getBoundingClientRect();
+  tipEl.style.left = Math.min(r.left + 30, window.innerWidth - 320) + "px";
+  tipEl.style.top = (r.bottom + 6) + "px";
+}
+function hideTip() { if (tipEl) tipEl.style.display = "none"; }
+
+function highlightStage(run) {
+  const map = $("#system-map"); if (!map) return;
+  map.querySelectorAll(".chip").forEach(c => c.classList.remove("chip-active","running","failnow","passnow"));
+  if (!run) return;
+  const w = (run.workflow||run.name||"").toLowerCase();
+  const running = run.status && run.status !== "completed";
+  let stages = [];
+  if (w.includes("generate")) stages = ["generate"];
+  else if (w.includes("regression") || w.includes("cucumber")) stages = ["regression"];
+  else if (w.includes("refine")) stages = ["refine"];
+  else if (w.includes("mindmap") || w.includes("project")) stages = ["mindmap"];
+  stages.forEach(s => map.querySelectorAll(`.chip[data-stage="${s}"]`).forEach(c => {
+    c.classList.add("chip-active"); if (running) c.classList.add("running");
+  }));
+  if (stages.includes("regression") && !running) {
+    if (run.conclusion === "failure") map.querySelectorAll('.chip[data-stage="fail"]').forEach(c => c.classList.add("chip-active","failnow"));
+    else if (run.conclusion === "success") map.querySelectorAll('.chip[data-stage="pass"]').forEach(c => c.classList.add("chip-active","passnow"));
+  }
+}
+
+function renderPicker(runs, selId) {
+  const p = $("#run-picker"); if (!p) return;
+  p.innerHTML = (runs||[]).map(r => {
+    const running = r.status !== "completed";
+    const color = running ? "var(--run)" : r.conclusion === "success" ? "var(--pass)"
+      : r.conclusion === "failure" ? "var(--fail)" : "var(--skip)";
+    return `<div class="rchip ${r.id===selId?'sel':''}" data-id="${r.id}" title="${esc(r.workflow||r.name)} #${r.run_number}">
+        <span class="rdot ${running?'live':''}" style="background:${color}"></span>
+        <span><div class="rn">${esc(shortWf(r.workflow||r.name))}</div>
+          <div class="rmeta">#${r.run_number} · ${esc(r.branch||'')}</div></span>
+      </div>`;
+  }).join("");
+  p.querySelectorAll(".rchip").forEach(c => c.onclick = () => { selectedRunId = +c.dataset.id; hideTip(); loadPipeline(); });
+}
+
 async function loadPipeline() {
   const el = $("#pipeline-body");
-  const data = await get("/api/pipeline");
+  const data = await get("/api/pipeline" + (selectedRunId ? `?run=${selectedRunId}` : ""));
   if (data.needs_token) { el.innerHTML = `<div class="empty">Set <code>GITHUB_TOKEN</code> and restart to watch live runs.<br>The Overview tab needs no setup.</div>`; return; }
   if (data.error) { el.innerHTML = `<div class="empty">${esc(data.error)}</div>`; return; }
-  if (!data.run) { el.innerHTML = `<div class="empty">No workflow runs yet.</div>`; return; }
+  if (!data.run) { el.innerHTML = `<div class="empty">No workflow runs yet.</div>`; $("#run-picker").innerHTML = ""; return; }
+
   const r = data.run;
+  const selId = selectedRunId || r.id;
+  renderPicker(data.runs, selId);
+  highlightStage(r);
+
   const running = r.status !== "completed";
   const head = `<div class="runline">
       <span class="rt">${esc(r.workflow||r.name)}</span> ${badge(r)}
@@ -379,12 +505,13 @@ async function loadPipeline() {
     const cls = stepClass(s, i, data.current);
     const label = s.status === "completed" ? (s.conclusion||"done")
       : (i === data.current ? "running now" : s.status || "pending");
-    return `<li class="pstep ${cls}">
+    return `<li class="pstep ${cls}" data-desc="${esc(describeStep(s.name))}">
         <span class="rail"><span class="bullet">${stepMark(cls)}</span><span class="line"></span></span>
         <span class="content"><div class="nm">${esc(s.name)}</div><div class="st">${esc(label)} · ${fmtTime(s.started_at,s.completed_at)}</div></span>
       </li>`;
   }).join("");
   el.innerHTML = head + `<ul class="stepper">${steps}</ul>`;
+  el.querySelectorAll(".pstep").forEach(s => { s.addEventListener("mouseenter", showTip); s.addEventListener("mouseleave", hideTip); });
 }
 
 /* ---- monitor: runs ---- */
