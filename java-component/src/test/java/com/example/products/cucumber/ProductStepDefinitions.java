@@ -70,9 +70,9 @@ public class ProductStepDefinitions {
         body.put("name", name);
         body.put("price", price);
         Response response = RestAssured.given()
-                contentType(ContentType.JSON)
-                body(body)
-                post("/products");
+                .contentType(ContentType.JSON)
+                .body(body)
+                .post("/products");
         response.then().statusCode(201);
         context.setLastCreatedId("product", response.jsonPath().getLong("id"));
     }
@@ -85,23 +85,23 @@ public class ProductStepDefinitions {
     @When("a client filters products with min price {double} and max price {double}")
     public void aClientFiltersProducts(double minPrice, double maxPrice) {
         context.setLastResponse(RestAssured.given()
-                queryParam("minPrice", minPrice)
-                queryParam("maxPrice", maxPrice)
-                get("/products"));
+                .queryParam("minPrice", minPrice)
+                .queryParam("maxPrice", maxPrice)
+                .get("/products"));
     }
 
     @When("a client filters products with min price {double}")
     public void aClientFiltersProductsByMinPrice(double minPrice) {
         context.setLastResponse(RestAssured.given()
-                queryParam("minPrice", minPrice)
-                get("/products"));
+                .queryParam("minPrice", minPrice)
+                .get("/products"));
     }
 
     @When("a client filters products with max price {double}")
     public void aClientFiltersProductsByMaxPrice(double maxPrice) {
         context.setLastResponse(RestAssured.given()
-                queryParam("maxPrice", maxPrice)
-                get("/products"));
+                .queryParam("maxPrice", maxPrice)
+                .get("/products"));
     }
 
     @When("a client places an order for the last created product with quantity {int}")
@@ -117,20 +117,20 @@ public class ProductStepDefinitions {
     @When("a client places an order with payload:")
     public void aClientPlacesAnOrderWithPayload(String payload) {
         context.setLastResponse(RestAssured.given()
-                contentType(ContentType.JSON)
-                body(payload)
-                post("/orderss"));
+                .contentType(ContentType.JSON)
+                .body(payload)
+                .post("/orders"));
     }
 
     @When("a client requests the order with id {long}")
     public void aClientRequestsTheOrderWithId(long id) {
-        context.setLastResponse(RestAssured.given().get("/orderss/" + id));
+        context.setLastResponse(RestAssured.given().get("/orders/" + id));
     }
 
     @When("a client requests the last created order")
     public void aClientRequestsTheLastCreatedOrder() {
         context.setLastResponse(
-                RestAssured.given().get("/orderss/" + context.getLastCreatedId("order")));
+                RestAssured.given().get("/orders/" + context.getLastCreatedId("order")));
     }
 
     private void placeOrder(Long productId, int quantity) {
@@ -138,9 +138,9 @@ public class ProductStepDefinitions {
         body.put("productId", productId);
         body.put("quantity", quantity);
         Response response = RestAssured.given()
-                contentType(ContentType.JSON)
-                body(body)
-                post("/orderss");
+                .contentType(ContentType.JSON)
+                .body(body)
+                .post("/orders");
         context.setLastResponse(response);
         if (response.statusCode() == 201) {
             context.setLastCreatedId("order", response.jsonPath().getLong("id"));
@@ -164,9 +164,9 @@ public class ProductStepDefinitions {
         body.put("name", name);
         body.put("price", price);
         Response response = RestAssured.given()
-                contentType(ContentType.JSON)
-                body(body)
-                post("/products");
+                .contentType(ContentType.JSON)
+                .body(body)
+                .post("/products");
         context.setLastResponse(response);
         if (response.statusCode() == 201) {
             context.setLastCreatedId("product", response.jsonPath().getLong("id"));
@@ -176,9 +176,9 @@ public class ProductStepDefinitions {
     @When("a client creates a product with payload:")
     public void aClientCreatesAProductWithPayload(String payload) {
         context.setLastResponse(RestAssured.given()
-                contentType(ContentType.JSON)
-                body(payload)
-                post("/products"));
+                .contentType(ContentType.JSON)
+                .body(payload)
+                .post("/products"));
     }
 
     @When("a client updates the last created product with name {string} and price {double}")
@@ -187,9 +187,9 @@ public class ProductStepDefinitions {
         body.put("name", name);
         body.put("price", price);
         context.setLastResponse(RestAssured.given()
-                contentType(ContentType.JSON)
-                body(body)
-                put("/products/" + context.getLastCreatedId("product")));
+                .contentType(ContentType.JSON)
+                .body(body)
+                .put("/products/" + context.getLastCreatedId("product")));
     }
 
     @When("a client updates the product with id {long} with name {string} and price {double}")
@@ -198,15 +198,15 @@ public class ProductStepDefinitions {
         body.put("name", name);
         body.put("price", price);
         context.setLastResponse(RestAssured.given()
-                contentType(ContentType.JSON)
-                body(body)
-                put("/products/" + id));
+                .contentType(ContentType.JSON)
+                .body(body)
+                .put("/products/" + id));
     }
 
     @When("a client deletes the last created product")
     public void aClientDeletesTheLastCreatedProduct() {
         context.setLastResponse(RestAssured.given()
-                delete("/products/" + context.getLastCreatedId("product")));
+                .delete("/products/" + context.getLastCreatedId("product")));
     }
 
     @When("a client deletes the product with id {long}")
