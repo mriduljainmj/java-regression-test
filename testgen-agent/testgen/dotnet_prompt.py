@@ -28,9 +28,22 @@ What counts as observable (ALWAYS requires a scenario):
   Scenario asserting status 400 and the message. Never call such a change "no
   observable behavior".
 
+ENDPOINT PATHS LIVE IN THE STEP DEFINITIONS, NOT THE GHERKIN:
+- The .feature files describe behavior in business language and contain NO URLs — the
+  actual request paths are built in the C# step definitions (e.g. the HttpClient calls
+  like `GetAsync("api/products")`, `PostAsync("api/products/" + id, ...)`).
+- So when a controller's base path or a route CHANGES (e.g. api/products ->
+  api/product, or [Route] changes), the fix is a STEPDEF block, NOT a feature edit:
+  return the updated step-definition file(s) (full content) with the new path, and do
+  NOT rewrite the .feature files for a pure path rename. Editing only the .feature
+  files leaves every request hitting the OLD path (404) — the usual reason these
+  tests fail after a rename. Update EVERY glue file that references the changed path.
+
 Hard constraints:
 - If any .cs source in the diff changes observable behavior, you MUST output at
   least one FEATURE block, and ENDPOINTS must name the impacted endpoint(s).
+  (Exception: a pure path/route rename needs a STEPDEF update, not a FEATURE block —
+  see the rule above.)
 - Reuse existing step wording whenever possible.
 - If a step has no existing binding, include full C# glue in a STEPDEF block.
 - C# syntax only: [Given]/[When]/[Then] (never @Given/@When/@Then).

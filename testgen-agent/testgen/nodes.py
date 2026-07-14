@@ -687,15 +687,23 @@ def validate_output(state: TestGenState) -> TestGenState:
             ".cs" in line or ".csproj" in line or "Program.cs" in line
             for line in git_diff.split("\n")
         )
-        if dotnet_files_changed and (generation is None or not generation.new_or_modified_features):
+        # A pure path/route rename is fixed by updating step definitions (which build
+        # the URLs) with NO feature change — so only error when there is neither a
+        # feature nor a step-definition update to show for a .NET source change.
+        produced_nothing = generation is None or (
+            not generation.new_or_modified_features
+            and not generation.new_or_modified_step_definitions
+        )
+        if dotnet_files_changed and produced_nothing:
             return {
                 "validation_errors": [
                     "❌ CRITICAL VALIDATION FAILURE:\n"
                     ".NET source code changed (detected *.cs or *.csproj files in diff), "
-                    "but ZERO feature files were generated.\n"
-                    "The LLM MUST generate at least one SpecFlow feature file for every "
-                    "new or modified .NET endpoint. \n"
-                    "RETRY: Call the LLM again with stronger mandate to generate .NET tests."
+                    "but ZERO feature files AND ZERO step-definition updates were generated.\n"
+                    "For a NEW or MODIFIED endpoint, generate a SpecFlow feature file. "
+                    "For a pure path/route RENAME, return the updated step-definition "
+                    "file(s) with the new URL instead.\n"
+                    "RETRY: Call the LLM again with a stronger mandate."
                 ]
             }
     

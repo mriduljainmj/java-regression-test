@@ -49,9 +49,21 @@ GHERKIN WRITING GUIDELINES
   scenarios that remain valid plus the new ones), not a fragment.
 
 STEP DEFINITIONS (JAVA GLUE)
+- ENDPOINT PATHS LIVE IN THE GLUE, NOT THE GHERKIN. The .feature files describe
+  behavior in business language and contain NO URLs — the actual request paths are
+  built in the step definitions (e.g. `RestAssured.basePath` and calls like
+  `.get("/products")`, `.post("/products/" + id)`). So when a controller's base path
+  or a route CHANGES (e.g. /api/v1/products → /api/v1/product, or /products →
+  /product), the fix is in the STEP-DEFINITION files, NOT the feature files: return
+  the updated glue file(s) (full content) with the new path, and do NOT rewrite the
+  .feature files for a pure path rename. Editing only the .feature files leaves every
+  request hitting the OLD path (404) — that is the most common way these tests fail
+  after a rename. Update EVERY glue file that references the changed path
+  (e.g. both ProductStepDefinitions and ReviewStepDefinitions for a product path).
 - STRONGLY prefer composing scenarios from existing step patterns. Only create or
   update Java step-definition files when the required behavior genuinely cannot be
-  expressed with any existing step.
+  expressed with any existing step — OR when a path/route change means an existing
+  glue file must be updated to hit the new URL (see the rule above).
 - New glue must follow the style of the existing step definitions: RestAssured
   calls, parameterized cucumber expressions ({string}, {int}, {long}, {double}),
   and declarative API-level phrasing.
