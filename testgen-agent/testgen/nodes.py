@@ -542,6 +542,20 @@ def generate_tests(state: TestGenState) -> TestGenState:
     so the graph's retry loop feeds them back to the model, exactly like Gherkin
     validation failures.
     """
+    # A pure path/route rename only needs the URL strings in the glue changed. Do that
+    # deterministically instead of asking a model to rewrite a whole step-def file —
+    # which is how free models introduce compile errors. The LLM still handles
+    # everything else (new endpoints, validation, renames bundled with logic changes).
+    if _pure_route_rename(state.get("git_diff", "")):
+        det = _deterministic_rename_generation(state)
+        if det is not None:
+            logger.info(
+                "Pure path rename — patched %d glue file(s) deterministically, skipping the LLM",
+                len(det.new_or_modified_step_definitions),
+            )
+            return {"generation": det, "attempts": state.get("attempts", 0) + 1,
+                    "validation_errors": []}
+
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
@@ -690,6 +704,110 @@ def _diff_renames_route(git_diff: str) -> bool:
         elif line.startswith("+") and not line.startswith("+++"):
             added += _ROUTE_ANNOTATION_RE.findall(line)
     return bool(removed) and bool(added) and set(removed) != set(added)
+
+
+def _rename_pairs(git_diff: str):
+    """Extract (old_path, new_path) route-rename pairs from the diff."""
+    removed, added = [], []
+    for line in git_diff.splitlines():
+        if line.startswith("-") and not line.startswith("---"):
+            removed += _ROUTE_ANNOTATION_RE.findall(line)
+        elif line.startswith("+") and not line.startswith("+++"):
+            added += _ROUTE_ANNOTATION_RE.findall(line)
+    old_only = [r for r in removed if r not in added]
+    new_only = [a for a in added if a not in removed]
+    return list(zip(old_only, new_only))
+
+
+def _apply_path_rename(text: str, old_full: str, new_full: str) -> str:
+    """Boundary-safe replacement of a renamed route. Replaces the differing trailing
+    segment so a RestAssured basePath-split glue (basePath '/api/v1' + '.get(/orders)')
+    is patched too, and the (?![A-Za-z0-9]) guard avoids partial hits (/orders vs
+    /orderss). Only URL strings change — nothing else in the file is touched."""
+    o = old_full.strip("/").split("/")
+    n = new_full.strip("/").split("/")
+    i = 0
+    while i < len(o) and i < len(n) and o[i] == n[i]:
+        i += 1
+    if i >= len(o):
+        return text
+    old_suffix = "/" + "/".join(o[i:])
+    new_suffix = "/" + "/".join(n[i:]) if i < len(n) else ""
+    return re.sub(re.escape(old_suffix) + r"(?![A-Za-z0-9])", new_suffix, text)
+
+
+def _pure_route_rename(git_diff: str) -> bool:
+    """True when the ONLY component-source change is the route string(s) — a pure
+    rename with no logic change, safe to patch deterministically. Changes to the
+    agent's own code, tests, or other files are ignored for this check."""
+    if not _rename_pairs(git_diff):
+        return False
+    cur = None
+    for line in git_diff.splitlines():
+        if line.startswith("+++ "):
+            cur = line[4:].strip()
+            continue
+        if line.startswith("--- ") or not (line.startswith("+") or line.startswith("-")):
+            continue
+        is_component_src = bool(cur) and (
+            ("java-component/src/main" in cur or ("dotnet-component" in cur and "/Tests/" not in cur))
+            and cur.endswith((".java", ".cs"))
+        )
+        if not is_component_src:
+            continue
+        body = line[1:].strip()
+        if not body or body in ("{", "}", ");", ")", ";"):
+            continue
+        if _ROUTE_ANNOTATION_RE.search(body):
+            continue
+        return False  # a real logic change in the controller — let the LLM handle it
+    return True
+
+
+def _deterministic_rename_generation(state: TestGenState):
+    """For a pure path rename, patch the step-definition glue directly — only the URL
+    strings, so it always compiles — instead of asking a model to rewrite the whole
+    file. Returns a GenerationResult, or None if no glue references the renamed path."""
+    pairs = _rename_pairs(state.get("git_diff", ""))
+    if not pairs:
+        return None
+    repo = Path(state["repo_path"])
+    project_type = state.get("project_type", "java")
+
+    glue_paths = []
+    if project_type == "dotnet":
+        for cs in _iter_repo_files(repo, "*StepDefinitions.cs"):
+            if str(cs.relative_to(repo)).startswith("dotnet-component/Tests/"):
+                glue_paths.append(cs)
+    else:
+        for j in _iter_repo_files(repo, "*.java"):
+            rel = str(j.relative_to(repo))
+            if JAVA_TEST_MARKER in rel and extract_step_patterns(_read(j)):
+                glue_paths.append(j)
+
+    changed = []
+    for p in glue_paths:
+        text = _read(p)
+        new = text
+        for old_full, new_full in pairs:
+            new = _apply_path_rename(new, old_full, new_full)
+        if new != text:
+            rel = str(p.relative_to(repo))
+            changed.append(StepDefinitionFile(
+                file_name=rel, action="UPDATE", content=new,
+                language="csharp" if rel.endswith(".cs") else "java"))
+
+    if not changed:
+        return None
+    renames = ", ".join(f"{o} -> {n}" for o, n in pairs)
+    return GenerationResult(
+        impacted_endpoints=[f"path renamed: {o} -> {n}" for o, n in pairs],
+        analysis_summary=(
+            f"Pure path rename ({renames}). Patched the request URLs in the step "
+            "definitions deterministically; no scenario or assertion was changed."),
+        new_or_modified_features=[],
+        new_or_modified_step_definitions=changed,
+    )
 
 
 def validate_output(state: TestGenState) -> TestGenState:
