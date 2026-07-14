@@ -26,6 +26,7 @@ import urllib.request
 import urllib.error
 import urllib.parse
 import socket
+import xml.etree.ElementTree as ET
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -137,19 +138,66 @@ def latest_pipeline(run_id=None):
     return {"run": run, "steps": steps, "current": current, "runs": runs}
 
 
-def run_cucumber_artifact(run_id: int):
-    """Download + parse the cucumber-report artifact for a run, if present."""
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):  # don't auto-follow — we re-fetch unauthenticated
+        return None
+
+
+def _download_artifact(archive_url: str) -> bytes:
+    """Download an artifact zip. GitHub 302-redirects artifact URLs to signed blob
+    storage that REJECTS the Authorization header (that's the '401 www-authenticate'
+    error) — so we capture the redirect and fetch the signed URL with no auth."""
+    req = urllib.request.Request(archive_url, headers={
+        "Authorization": f"Bearer {TOKEN}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "testgen-dashboard",
+    })
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        with opener.open(req, timeout=60) as resp:   # no redirect (rare) — direct bytes
+            return resp.read()
+    except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 303, 307, 308):
+            loc = e.headers.get("Location")
+            with urllib.request.urlopen(loc, timeout=60) as r:  # signed URL, unauthenticated
+                return r.read()
+        raise
+
+
+def _find_artifact(run_id: int, *needles):
     arts = _gh(f"/repos/{REPO}/actions/runs/{run_id}/artifacts")
-    target = next((a for a in arts.get("artifacts", [])
-                   if "cucumber" in a["name"].lower()), None)
+    for a in arts.get("artifacts", []):
+        name = a["name"].lower()
+        if any(n in name for n in needles):
+            return a
+    return None
+
+
+def run_cucumber_artifact(run_id: int):
+    """Download + parse the Java cucumber-report artifact for a run, if present."""
+    target = _find_artifact(run_id, "cucumber-report-java", "cucumber")
     if not target:
         return None
-    zipped = _gh(target["archive_download_url"], raw=True)
+    zipped = _download_artifact(target["archive_download_url"])
     with zipfile.ZipFile(io.BytesIO(zipped)) as zf:
         name = next((n for n in zf.namelist() if n.endswith(".json")), None)
         if not name:
             return None
         return json.loads(zf.read(name))
+
+
+def run_dotnet_trx(run_id: int):
+    """Download the .NET TRX artifact for a run and return its raw XML bytes, if present."""
+    target = _find_artifact(run_id, "dotnet-test-results", "trx")
+    if not target:
+        return None
+    zipped = _download_artifact(target["archive_download_url"])
+    with zipfile.ZipFile(io.BytesIO(zipped)) as zf:
+        name = next((n for n in zf.namelist() if n.endswith(".trx")), None)
+        if not name:
+            return None
+        return zf.read(name)
 
 
 # --------------------------------------------------------------------------- #
@@ -200,10 +248,65 @@ def parse_cucumber(report: list) -> dict:
                                for s in all_steps
                                if s.get("result", {}).get("status") == "failed"), ""),
             })
-        features.append({"name": feature.get("name"), "scenarios": scenarios})
+        features.append({"name": feature.get("name"), "scenarios": scenarios, "lang": "java"})
 
     return {"features": features, "totals": totals,
             "total": sum(totals.values())}
+
+
+_TRX_NS = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+
+
+def _trx_ms(dur: str) -> float:
+    """TRX duration 'HH:MM:SS.fffffff' → milliseconds."""
+    if not dur:
+        return 0.0
+    try:
+        h, m, s = dur.split(":")
+        return round((int(h) * 3600 + int(m) * 60 + float(s)) * 1000, 1)
+    except Exception:
+        return 0.0
+
+
+def _split_trx_name(name: str):
+    """Turn a SpecFlow test name into (feature, scenario) for display."""
+    name = name or ""
+    if "." in name:
+        parts = name.split(".")
+        feat = parts[-2] if len(parts) >= 2 else "SpecFlow"
+        scen = parts[-1]
+    else:
+        feat, scen = "SpecFlow", name
+    feat = feat.replace("Feature", "").strip() or "SpecFlow"
+    return feat, scen
+
+
+def parse_trx(data: bytes) -> dict:
+    """Flatten a .NET TRX report into the same per-feature/scenario shape as the
+    Cucumber parser, so Java and .NET results render identically."""
+    totals = {"passed": 0, "failed": 0, "skipped": 0}
+    try:
+        root = ET.fromstring(data)
+    except ET.ParseError:
+        return {"features": [], "totals": totals, "total": 0}
+
+    by_feature = {}
+    for utr in root.findall(".//t:UnitTestResult", _TRX_NS):
+        outcome = (utr.get("outcome") or "").lower()
+        status = "passed" if outcome == "passed" else "failed" if outcome == "failed" else "skipped"
+        totals[status] = totals.get(status, 0) + 1
+        msg_el = utr.find(".//t:Message", _TRX_NS)
+        err = (msg_el.text or "").strip() if msg_el is not None else ""
+        feat, scen = _split_trx_name(utr.get("testName") or "")
+        by_feature.setdefault(feat, []).append({
+            "name": scen,
+            "status": status,
+            "duration_ms": _trx_ms(utr.get("duration") or ""),
+            "failed_step": (err.splitlines()[0][:120] if (status == "failed" and err) else None),
+            "error": err,
+        })
+    features = [{"name": f, "scenarios": s, "lang": "dotnet"} for f, s in by_feature.items()]
+    return {"features": features, "totals": totals, "total": sum(totals.values())}
 
 
 def local_results():
@@ -269,14 +372,27 @@ class Handler(BaseHTTPRequestHandler):
             run_id = int(path.split("/")[3])
 
             def fetch():
-                report = run_cucumber_artifact(run_id)
-                if report is None:
+                parts = []  # (source-label, parsed-result) for whichever suites ran
+                java_report = run_cucumber_artifact(run_id)
+                if java_report is not None:
+                    parts.append(("Java", parse_cucumber(java_report)))
+                trx = run_dotnet_trx(run_id)
+                if trx is not None:
+                    parts.append((".NET", parse_trx(trx)))
+
+                if not parts:
                     out = local_results()
-                    out["source"] = "local fallback (no artifact on this run)"
+                    out["source"] = "local fallback (no test artifacts on this run)"
                     return out
-                out = parse_cucumber(report)
-                out["source"] = "github artifact"
-                return out
+
+                features, totals, srcs = [], {"passed": 0, "failed": 0, "skipped": 0}, []
+                for label, res in parts:
+                    features += res.get("features", [])
+                    for k, v in res.get("totals", {}).items():
+                        totals[k] = totals.get(k, 0) + v
+                    srcs.append(f"{label} artifact")
+                return {"features": features, "totals": totals,
+                        "total": sum(totals.values()), "source": " + ".join(srcs)}
             return self._json_safe(fetch)
 
         if path == "/api/results":  # local report, always available
