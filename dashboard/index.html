@@ -193,9 +193,19 @@
   .langtag.dotnet { color: #8b7bff; border-color: #8b7bff66; }
   .feature > h3 .fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .scn { display: flex; align-items: center; gap: 10px; padding: 7px 16px 7px 26px; }
-  .scn:hover { background: var(--panel2); }
   .scn-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .scn .err { color: var(--fail); font-size: 11px; margin-left: 6px; }
+  .scn .chev { margin-left: auto; color: var(--muted); font-size: 10px; transition: transform .15s; flex: none; }
+  .scn .dur { margin-left: 8px; }   /* chev owns the auto-margin so all rows stay right-aligned */
+  .scn-item.expandable > .scn { cursor: pointer; }
+  .scn-item.expandable > .scn:hover { background: var(--panel2); }
+  .scn-item:not(.expandable) > .scn:hover { background: var(--panel2); }
+  .scn-item.open .chev { transform: rotate(90deg); }
+  .scn-error { display: none; margin: 0 16px 9px 44px; padding: 10px 12px; background: #0b0e13;
+    border: 1px solid var(--fail); border-radius: 8px; color: #f2b8b5; font-family: var(--mono);
+    font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; }
+  .scn-item.open .scn-error { display: block; }
+  .cached-tag { color: var(--skip); }
   .empty { padding: 26px; text-align: center; color: var(--muted); }
   .empty code, .lede code { background: var(--panel2); padding: 2px 6px; border-radius: 4px; font-family: var(--mono); font-size: .85em; }
   a { color: var(--accent); text-decoration: none; }
@@ -611,22 +621,54 @@ function renderResults(data) {
       <div class="sstat"><b style="color:var(--skip)">${t.skipped||0}</b><span>skipped</span></div>
       <div class="sstat"><b>${data.total}</b><span>total</span></div>
     </div>
-    <div class="source">source: ${esc(data.source||"")}</div>` +
+    <div class="source">source: ${esc(data.source||"")}${data._cached?` · <span class="cached-tag">cached ${timeAgo(data._cached)}</span>`:""}</div>` +
     data.features.map(f => `
       <div class="feature">
         <h3><span class="fname">${esc(f.name)}</span>
           <span class="langtag ${f.lang||''}">${f.lang==='dotnet'?'.NET':'Java'}</span></h3>
-        ${f.scenarios.map(s => { const [c,i] = ico(s.status); return `
-          <div class="scn">
-            <span class="ico ${c}">${i}</span>
-            <span class="scn-name">${esc(s.name)}
-              ${s.failed_step?`<span class="err">↳ ${esc(s.failed_step)}</span>`:''}</span>
-            <span class="dur">${s.duration_ms}ms</span>
-          </div>`; }).join("")}
+        ${f.scenarios.map(s => {
+          const [c,i] = ico(s.status);
+          const hasErr = s.status === "failed" && s.error;
+          return `<div class="scn-item ${hasErr?'expandable':''}">
+            <div class="scn">
+              <span class="ico ${c}">${i}</span>
+              <span class="scn-name">${esc(s.name)}
+                ${s.failed_step?`<span class="err">↳ ${esc(s.failed_step)}</span>`:''}</span>
+              <span class="chev">${hasErr?'▸':''}</span>
+              <span class="dur">${s.duration_ms}ms</span>
+            </div>
+            ${hasErr?`<pre class="scn-error">${esc(s.error)}</pre>`:''}
+          </div>`;
+        }).join("")}
       </div>`).join("");
+  el.querySelectorAll(".scn-item.expandable > .scn").forEach(row =>
+    row.onclick = () => row.parentElement.classList.toggle("open"));
 }
-async function showResults(runId) { activeResultsRun = runId; renderResults(await get(`/api/runs/${runId}/results`)); }
-async function loadLocalResults() { if (activeResultsRun === null) renderResults(await get("/api/results")); }
+/* ---- results cache (localStorage) ---- */
+function timeAgo(t) {
+  const s = Math.round((Date.now() - t) / 1000);
+  if (s < 60) return s + "s ago";
+  const m = Math.round(s / 60);
+  return m < 60 ? m + "m ago" : Math.round(m / 60) + "h ago";
+}
+function cacheKey(runId) { return "testgen:results:" + (runId || "local"); }
+function saveCache(runId, data) {
+  try { localStorage.setItem(cacheKey(runId), JSON.stringify({ t: Date.now(), data })); } catch (e) {}
+}
+function loadCache(runId) {
+  try { const raw = localStorage.getItem(cacheKey(runId)); return raw ? JSON.parse(raw) : null; }
+  catch (e) { return null; }
+}
+// Show live data when it has scenarios (and cache it); otherwise fall back to the
+// last cached copy so a reload or a failed/empty fetch still shows the report.
+function renderWithCache(runId, data) {
+  if (data && data.total) { saveCache(runId, data); renderResults(data); return; }
+  const c = loadCache(runId);
+  if (c && c.data && c.data.total) renderResults({ ...c.data, _cached: c.t });
+  else renderResults(data || { error: "no data" });
+}
+async function showResults(runId) { activeResultsRun = runId; renderWithCache(runId, await get(`/api/runs/${runId}/results`)); }
+async function loadLocalResults() { if (activeResultsRun === null) renderWithCache("local", await get("/api/results")); }
 
 async function tick() {
   if (activeTab === "pipeline") await loadPipeline();
