@@ -674,13 +674,55 @@ def generate_tests(state: TestGenState) -> TestGenState:
     return {"generation": generation, "attempts": attempts, "validation_errors": []}
 
 
+_ROUTE_ANNOTATION_RE = re.compile(
+    r'(?:Mapping|\[Route|\[Http[A-Za-z]*)\s*\(\s*(?:value\s*=\s*)?"([^"]+)"'
+)
+
+
+def _diff_renames_route(git_diff: str) -> bool:
+    """True when the diff changes a controller route/path string — a Java @*Mapping
+    or a .NET [Route]/[Http*] value that was removed and re-added differently. Such a
+    rename must be reflected in the step-definition glue that builds the URLs."""
+    removed, added = [], []
+    for line in git_diff.splitlines():
+        if line.startswith("-") and not line.startswith("---"):
+            removed += _ROUTE_ANNOTATION_RE.findall(line)
+        elif line.startswith("+") and not line.startswith("+++"):
+            added += _ROUTE_ANNOTATION_RE.findall(line)
+    return bool(removed) and bool(added) and set(removed) != set(added)
+
+
 def validate_output(state: TestGenState) -> TestGenState:
     """Validate generated Gherkin (structure, paths, CREATE/UPDATE consistency,
     and that every step matches an existing step definition)."""
     generation = state.get("generation")
     project_type = state.get("project_type", "java")
     git_diff = state.get("git_diff", "")
-    
+
+    # Route/path RENAME but an EMPTY generation: the model typically explains in its
+    # analysis that "the step definitions must be updated" and then forgets to emit
+    # the glue block — leaving nothing to write and no PR. URLs live in the step
+    # definitions, not the .feature files, so force the model to actually produce the
+    # updated glue. Applies to Java and .NET.
+    empty_generation = generation is not None and (
+        not generation.new_or_modified_features
+        and not generation.new_or_modified_step_definitions
+    )
+    if empty_generation and _diff_renames_route(git_diff):
+        glue_hint = ("*StepDefinitions.cs" if project_type == "dotnet"
+                     else "*StepDefinitions.java / *Steps.java")
+        return {
+            "validation_errors": [
+                "A controller route/path was RENAMED in the diff, but you produced NO "
+                "step-definition update and NO feature file. The request URLs are built "
+                "in the STEP DEFINITIONS (RestAssured basePath + \".get(/orders)\" for "
+                "Java, HttpClient paths for .NET), NOT in the .feature files. Return the "
+                f"FULL updated content of the affected step-definition file(s) ({glue_hint}) "
+                "as UPDATE blocks — change the old path to the new one and preserve every "
+                "existing step. Do NOT answer with analysis only."
+            ]
+        }
+
     # CRITICAL CHECK: If .NET source code changed but NO features generated, that's an ERROR
     if project_type == "dotnet":
         dotnet_files_changed = any(
