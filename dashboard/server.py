@@ -411,7 +411,7 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
 
         if path == "/" or path == "/index.html":
-            return self._send(200, (ROOT / "index.html").read_text(), "text/html")
+            return self._send(200, (ROOT / "index.html").read_text(encoding="utf-8"), "text/html")
 
         if path == "/api/config":
             return self._send(200, {"repo": REPO, "has_token": bool(TOKEN)})
