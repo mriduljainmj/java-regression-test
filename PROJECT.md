@@ -12,7 +12,7 @@ _This file is the AI's memory of the project. When loading this project, read th
 
 ## 🤖 Auto-Generated Snapshot
 
-*Last updated: 2026-07-13 16:15:46 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
+*Last updated: 2026-07-14 05:49:44 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
 
 ### API Endpoints
 
@@ -22,11 +22,11 @@ _This file is the AI's memory of the project. When loading this project, read th
   - `POST /api/v1/orders` → placeOrder()
   - `GET /api/v1/orders/{id}` → getOrder()
 - `ProductController`
-  - `GET /api/v1/product` → getAllProducts()
-  - `GET /api/v1/product/{id}` → getProduct()
-  - `POST /api/v1/product` → createProduct()
-  - `PUT /api/v1/product/{id}` → updateProduct()
-  - `DELETE /api/v1/product/{id}` → deleteProduct()
+  - `GET /api/v1/products` → getAllProducts()
+  - `GET /api/v1/products/{id}` → getProduct()
+  - `POST /api/v1/products` → createProduct()
+  - `PUT /api/v1/products/{id}` → updateProduct()
+  - `DELETE /api/v1/products/{id}` → deleteProduct()
 - `ReviewController`
   - `POST /api/v1/products/{productId}/reviews` → addReview()
   - `GET /api/v1/products/{productId}/rating` → getRating()
