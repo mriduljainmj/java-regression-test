@@ -12,15 +12,15 @@ _This file is the AI's memory of the project. When loading this project, read th
 
 ## 🤖 Auto-Generated Snapshot
 
-*Last updated: 2026-07-14 16:42:33 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
+*Last updated: 2026-07-14 17:13:04 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
 
 ### API Endpoints
 
 **Java (Spring Boot)**
 
 - `OrderController`
-  - `POST /api/v1/order` → placeOrder()
-  - `GET /api/v1/order/{id}` → getOrder()
+  - `POST /api/v1/orderss` → placeOrder()
+  - `GET /api/v1/orderss/{id}` → getOrder()
 - `ProductController`
   - `GET /api/v1/product` → getAllProducts()
   - `GET /api/v1/product/{id}` → getProduct()
