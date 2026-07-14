@@ -206,6 +206,12 @@
     font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; }
   .scn-item.open .scn-error { display: block; }
   .cached-tag { color: var(--skip); }
+  .sev { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .05em;
+    padding: 1px 6px; border-radius: 20px; border: 1px solid; flex: none; }
+  .sev.HIGH { color: var(--fail); border-color: var(--fail); background: rgba(248,81,73,.12); }
+  .sev.MEDIUM { color: var(--skip); border-color: var(--skip); background: rgba(210,153,34,.12); }
+  .sev.LOW { color: var(--run); border-color: var(--run); background: rgba(88,166,255,.12); }
+  .sev-reason { color: var(--muted); }
   .empty { padding: 26px; text-align: center; color: var(--muted); }
   .empty code, .lede code { background: var(--panel2); padding: 2px 6px; border-radius: 4px; font-family: var(--mono); font-size: .85em; }
   a { color: var(--accent); text-decoration: none; }
@@ -607,6 +613,16 @@ async function loadJobs(runId) {
       }).join("");
   }).join("");
 }
+function severitySummary(data) {
+  const c = data.severity_counts;
+  if (!c || (data.totals && !data.totals.failed)) return "";
+  const parts = [];
+  if (c.HIGH)   parts.push(`<span style="color:var(--fail)">${c.HIGH} high</span>`);
+  if (c.MEDIUM) parts.push(`<span style="color:var(--skip)">${c.MEDIUM} medium</span>`);
+  if (c.LOW)    parts.push(`<span style="color:var(--run)">${c.LOW} low</span>`);
+  if (!parts.length) return "";
+  return `<div class="source">failure criticality: ${parts.join(" · ")}</div>`;
+}
 function renderResults(data) {
   const el = $("#tests");
   if (data.error) { el.innerHTML = `<div class="empty">${esc(data.error)}</div>`; return; }
@@ -621,7 +637,8 @@ function renderResults(data) {
       <div class="sstat"><b style="color:var(--skip)">${t.skipped||0}</b><span>skipped</span></div>
       <div class="sstat"><b>${data.total}</b><span>total</span></div>
     </div>
-    <div class="source">source: ${esc(data.source||"")}${data._cached?` · <span class="cached-tag">cached ${timeAgo(data._cached)}</span>`:""}</div>` +
+    <div class="source">source: ${esc(data.source||"")}${data._cached?` · <span class="cached-tag">cached ${timeAgo(data._cached)}</span>`:""}</div>
+    ${severitySummary(data)}` +
     data.features.map(f => `
       <div class="feature">
         <h3><span class="fname">${esc(f.name)}</span>
@@ -629,15 +646,19 @@ function renderResults(data) {
         ${f.scenarios.map(s => {
           const [c,i] = ico(s.status);
           const hasErr = s.status === "failed" && s.error;
+          const sev = s.status === "failed" && s.severity
+            ? `<span class="sev ${s.severity}">${s.severity}</span>` : "";
+          const reasonHdr = s.severity_reason ? `${s.severity}: ${s.severity_reason}\n\n` : "";
           return `<div class="scn-item ${hasErr?'expandable':''}">
             <div class="scn">
               <span class="ico ${c}">${i}</span>
               <span class="scn-name">${esc(s.name)}
                 ${s.failed_step?`<span class="err">↳ ${esc(s.failed_step)}</span>`:''}</span>
+              ${sev}
               <span class="chev">${hasErr?'▸':''}</span>
               <span class="dur">${s.duration_ms}ms</span>
             </div>
-            ${hasErr?`<pre class="scn-error">${esc(s.error)}</pre>`:''}
+            ${hasErr?`<pre class="scn-error">${esc(reasonHdr)}${esc(s.error)}</pre>`:''}
           </div>`;
         }).join("")}
       </div>`).join("");

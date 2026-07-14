@@ -9,7 +9,18 @@ A single-screen app with three tabs:
   a step-by-step timeline with the currently-executing step highlighted, plus a
   system-at-a-glance infographic of the whole flow. Needs `GITHUB_TOKEN`.
 - **Monitor** — the detailed view: GitHub Actions runs → jobs → steps on the left,
-  Cucumber scenarios (grouped by feature, green/red with durations) on the right.
+  Java **and** .NET scenarios (grouped by feature, green/red with durations) on the right.
+  Click a failed scenario to expand its full failure reason, and each failure carries a
+  **criticality badge** (LOW / MEDIUM / HIGH).
+
+### Failure criticality
+
+Failed tests are rated LOW / MEDIUM / HIGH from their error text using rules in
+`dashboard/severity-rules.json` — **anyone can edit that file** (no restart needed) to add
+keyword/regex → severity mappings. Rules are checked top-to-bottom, first match wins; e.g.
+a `404 not found` is LOW (usually a stale path), a `500` is HIGH. The Monitor pane shows a
+per-test badge, the reason on expand, and a `failure criticality: N high · N medium · N low`
+summary.
 
 Stdlib-only Python backend (no `pip install`) + one self-contained HTML page.
 Auto-refreshes every 5 seconds.

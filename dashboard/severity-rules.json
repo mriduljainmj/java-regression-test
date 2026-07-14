@@ -1,0 +1,29 @@
+{
+  "_help": [
+    "Criticality rules for failed test cases. Anyone can edit this file — no restart needed.",
+    "Each failed scenario's text (error message + failing step + scenario name) is checked",
+    "against 'rules' TOP-TO-BOTTOM and the FIRST match wins.",
+    "  contains : case-insensitive substring match",
+    "  regex    : Python regular expression (case-insensitive)",
+    "  severity : LOW | MEDIUM | HIGH",
+    "  reason   : short text shown in the dashboard explaining the rating",
+    "Anything that matches no rule gets 'default'. Put more specific/important rules first."
+  ],
+  "default": "MEDIUM",
+  "rules": [
+    { "contains": "500", "severity": "HIGH", "reason": "Server error (5xx) — the API crashed or threw" },
+    { "contains": "internal server error", "severity": "HIGH", "reason": "Server error — the API crashed" },
+    { "regex": "NullPointer|NullReference|StackOverflow|Unhandled exception|Exception in", "severity": "HIGH", "reason": "Unhandled exception in the service" },
+    { "contains": "timeout", "severity": "HIGH", "reason": "Request timed out — possible hang or deadlock" },
+    { "contains": "connection refused", "severity": "HIGH", "reason": "Service unreachable" },
+    { "contains": "401", "severity": "HIGH", "reason": "Unauthorized — authentication broke" },
+    { "contains": "403", "severity": "HIGH", "reason": "Forbidden — an authorization rule broke" },
+    { "regex": "expected 4\\d\\d but (was|got) 2\\d\\d", "severity": "MEDIUM", "reason": "Validation not enforced — a bad request was accepted" },
+    { "contains": "assertionerror", "severity": "MEDIUM", "reason": "Wrong value returned — behaviour changed" },
+    { "contains": "comparisonfailure", "severity": "MEDIUM", "reason": "Expected vs actual mismatch" },
+    { "contains": "400", "severity": "MEDIUM", "reason": "Bad request — payload/validation mismatch" },
+    { "contains": "undefined step", "severity": "LOW", "reason": "Missing step definition — test glue needs updating" },
+    { "contains": "404", "severity": "LOW", "reason": "Not found — usually a routing/path mismatch in the test" },
+    { "contains": "not found", "severity": "LOW", "reason": "Resource not found — likely a stale URL/path" }
+  ]
+}

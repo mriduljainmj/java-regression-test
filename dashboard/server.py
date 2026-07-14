@@ -21,6 +21,7 @@ Environment:
 import json
 import os
 import io
+import re
 import zipfile
 import urllib.request
 import urllib.error
@@ -317,6 +318,66 @@ def local_results():
 
 
 # --------------------------------------------------------------------------- #
+# Failure severity (criticality) — rules are editable in severity-rules.json
+# --------------------------------------------------------------------------- #
+SEVERITY_FILE = ROOT / "severity-rules.json"
+_SEVERITY_FALLBACK = {
+    "default": "MEDIUM",
+    "rules": [
+        {"contains": "500", "severity": "HIGH", "reason": "Server error (5xx) — the API crashed or threw"},
+        {"contains": "404", "severity": "LOW", "reason": "Not found — usually a routing/path mismatch in the test"},
+    ],
+}
+
+
+def load_severity_rules():
+    """Read the editable rules file each call, so manual edits apply without a restart."""
+    try:
+        cfg = json.loads(SEVERITY_FILE.read_text())
+        if isinstance(cfg, dict) and isinstance(cfg.get("rules"), list):
+            return cfg
+    except Exception:
+        pass
+    return _SEVERITY_FALLBACK
+
+
+def _classify(text: str, cfg: dict):
+    """First matching rule wins; return (severity, reason)."""
+    raw = text or ""
+    low = raw.lower()
+    for rule in cfg.get("rules", []):
+        sub = rule.get("contains")
+        rgx = rule.get("regex")
+        matched = (sub and sub.lower() in low)
+        if not matched and rgx:
+            try:
+                matched = bool(re.search(rgx, raw, re.IGNORECASE))
+            except re.error:
+                matched = False
+        if matched:
+            sev = str(rule.get("severity", "MEDIUM")).upper()
+            return sev, rule.get("reason", "")
+    return str(cfg.get("default", "MEDIUM")).upper(), ""
+
+
+def annotate_severity(result: dict) -> dict:
+    """Tag each failed scenario with a severity + reason, and add overall counts."""
+    cfg = load_severity_rules()
+    counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
+    for feature in result.get("features", []):
+        for scn in feature.get("scenarios", []):
+            if scn.get("status") != "failed":
+                continue
+            text = " ".join(x for x in (scn.get("error"), scn.get("failed_step"), scn.get("name")) if x)
+            sev, reason = _classify(text, cfg)
+            scn["severity"] = sev
+            scn["severity_reason"] = reason
+            counts[sev] = counts.get(sev, 0) + 1
+    result["severity_counts"] = counts
+    return result
+
+
+# --------------------------------------------------------------------------- #
 # HTTP handler
 # --------------------------------------------------------------------------- #
 class Handler(BaseHTTPRequestHandler):
@@ -383,7 +444,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not parts:
                     out = local_results()
                     out["source"] = "local fallback (no test artifacts on this run)"
-                    return out
+                    return annotate_severity(out)
 
                 features, totals, srcs = [], {"passed": 0, "failed": 0, "skipped": 0}, []
                 for label, res in parts:
@@ -391,14 +452,14 @@ class Handler(BaseHTTPRequestHandler):
                     for k, v in res.get("totals", {}).items():
                         totals[k] = totals.get(k, 0) + v
                     srcs.append(f"{label} artifact")
-                return {"features": features, "totals": totals,
-                        "total": sum(totals.values()), "source": " + ".join(srcs)}
+                return annotate_severity({"features": features, "totals": totals,
+                        "total": sum(totals.values()), "source": " + ".join(srcs)})
             return self._json_safe(fetch)
 
         if path == "/api/results":  # local report, always available
             out = local_results()
             out["source"] = "local cucumber-report.json"
-            return self._send(200, out)
+            return self._send(200, annotate_severity(out))
 
         return self._send(404, {"error": "not found"})
 
