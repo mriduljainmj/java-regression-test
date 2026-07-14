@@ -135,10 +135,18 @@
   .chip.chip-active.failnow { border-color: var(--fail); background: var(--fail); box-shadow: 0 0 0 3px rgba(248,81,73,.22); }
   .chip.chip-active.passnow { border-color: var(--pass); background: var(--pass); box-shadow: 0 0 0 3px rgba(63,185,80,.22); }
 
-  /* run picker */
-  .run-picker { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 14px; margin-top: 22px; }
-  .rchip { flex: none; cursor: pointer; border: 1px solid var(--border); background: var(--panel);
-    border-radius: 10px; padding: 9px 12px; display: flex; align-items: center; gap: 9px; min-width: 150px; }
+  /* run picker — grouped by commit */
+  .run-picker { display: flex; flex-direction: column; gap: 12px; padding: 4px 0 14px; margin-top: 22px; }
+  .cgroup { border: 1px solid var(--border); border-radius: 12px; background: var(--panel2); padding: 10px 12px; }
+  .chead { display: flex; align-items: baseline; gap: 9px; margin-bottom: 9px; }
+  .chead .csha { font-family: var(--mono); font-size: 11px; color: var(--accent); background: var(--accent-wash);
+    padding: 2px 7px; border-radius: 6px; flex: none; }
+  .chead .cmsg { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chead .clatest { font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--pass); border: 1px solid var(--pass); border-radius: 20px; padding: 1px 7px; flex: none; margin-left: auto; }
+  .crow { display: flex; gap: 8px; flex-wrap: wrap; }
+  .rchip { cursor: pointer; border: 1px solid var(--border); background: var(--panel);
+    border-radius: 10px; padding: 8px 11px; display: flex; align-items: center; gap: 9px; min-width: 148px; }
   .rchip:hover { border-color: var(--muted); }
   .rchip.sel { border-color: var(--accent); background: var(--accent-wash); }
   .rchip .rdot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
@@ -265,8 +273,9 @@
   <div class="container">
     <p class="eyebrow">Live · where is it right now</p>
     <h2 class="big" style="font-size:1.6rem">Watch the pipeline work, step by step.</h2>
-    <p class="lede">Several workflows can run at once — pick one below to follow it. The step executing right now is
-      highlighted, hover any step for what it does, and the map on the right tracks the stage it's in. Updates every 5s.</p>
+    <p class="lede">Runs are grouped by commit — the newest 3 commits, each with its own pipelines — so after a merge you
+      see exactly which runs belong together. Pick one to follow it: the step executing now is highlighted, hover any
+      step for what it does, and the map on the right tracks the stage it's in. Updates every 5s.</p>
 
     <div class="run-picker" id="run-picker"></div>
 
@@ -464,18 +473,35 @@ function highlightStage(run) {
   }
 }
 
+function rchipHtml(r, selId) {
+  const running = r.status !== "completed";
+  const color = running ? "var(--run)" : r.conclusion === "success" ? "var(--pass)"
+    : r.conclusion === "failure" ? "var(--fail)" : "var(--skip)";
+  return `<div class="rchip ${r.id===selId?'sel':''}" data-id="${r.id}" title="${esc(r.workflow||r.name)} #${r.run_number}">
+      <span class="rdot ${running?'live':''}" style="background:${color}"></span>
+      <span><div class="rn">${esc(shortWf(r.workflow||r.name))}</div>
+        <div class="rmeta">#${r.run_number} · ${esc(r.branch||'')}</div></span>
+    </div>`;
+}
 function renderPicker(runs, selId) {
   const p = $("#run-picker"); if (!p) return;
-  p.innerHTML = (runs||[]).map(r => {
-    const running = r.status !== "completed";
-    const color = running ? "var(--run)" : r.conclusion === "success" ? "var(--pass)"
-      : r.conclusion === "failure" ? "var(--fail)" : "var(--skip)";
-    return `<div class="rchip ${r.id===selId?'sel':''}" data-id="${r.id}" title="${esc(r.workflow||r.name)} #${r.run_number}">
-        <span class="rdot ${running?'live':''}" style="background:${color}"></span>
-        <span><div class="rn">${esc(shortWf(r.workflow||r.name))}</div>
-          <div class="rmeta">#${r.run_number} · ${esc(r.branch||'')}</div></span>
-      </div>`;
-  }).join("");
+  // Group runs by commit (runs come newest-first, so groups stay in that order),
+  // then show the last 3 commits — the pipelines you care about after a merge.
+  const groups = [], byKey = {};
+  (runs||[]).forEach(r => {
+    const key = r.head_sha || "unknown";
+    if (!(key in byKey)) { byKey[key] = groups.length; groups.push({ sha: key, msg: r.commit_msg || "", runs: [] }); }
+    groups[byKey[key]].runs.push(r);
+  });
+  p.innerHTML = groups.slice(0, 3).map((g, gi) => `
+    <div class="cgroup">
+      <div class="chead">
+        <span class="csha">${esc(g.sha)}</span>
+        <span class="cmsg">${esc(g.msg || "(no commit message)")}</span>
+        ${gi === 0 ? '<span class="clatest">latest</span>' : ''}
+      </div>
+      <div class="crow">${g.runs.map(r => rchipHtml(r, selId)).join("")}</div>
+    </div>`).join("");
   p.querySelectorAll(".rchip").forEach(c => c.onclick = () => { selectedRunId = +c.dataset.id; hideTip(); loadPipeline(); });
 }
 

@@ -75,7 +75,8 @@ def list_runs(limit: int = 20):
             "run_number": r.get("run_number"),
             "created_at": r.get("created_at"),
             "html_url": r.get("html_url"),
-            "commit": (r.get("head_commit") or {}).get("message", "").splitlines()[:1],
+            "head_sha": (r.get("head_sha") or "")[:7],
+            "commit_msg": (((r.get("head_commit") or {}).get("message", "").splitlines() or [""])[0]),
         })
     return runs
 
