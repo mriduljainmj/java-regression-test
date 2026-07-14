@@ -550,6 +550,15 @@ async function loadRuns() {
   }
   if (data.error) { el.innerHTML = `<div class="empty">${esc(data.error)}</div>`; return; }
   if (!data.length) { el.innerHTML = `<div class="empty">No workflow runs yet.</div>`; return; }
+
+  // Preserve already-loaded step lists across the 5s refresh so an expanded run
+  // doesn't flash back to "loading…" every tick — loadJobs() then updates in place.
+  const prevJobs = {};
+  openRuns.forEach(id => {
+    const b = document.getElementById(`jobs-${id}`);
+    if (b && b.innerHTML && b.innerHTML !== "loading…") prevJobs[id] = b.innerHTML;
+  });
+
   el.innerHTML = data.map(r => `
     <div class="run ${openRuns.has(r.id)?'open':''}" data-id="${r.id}">
       <div class="run-head">
@@ -558,7 +567,7 @@ async function loadRuns() {
         <span class="run-meta">#${r.run_number} · ${esc(r.branch)} · ${esc(r.event)}
           · <a href="${r.html_url}" target="_blank">GitHub ↗</a></span>
       </div>
-      <div class="jobs" id="jobs-${r.id}">${openRuns.has(r.id)?'loading…':''}</div>
+      <div class="jobs" id="jobs-${r.id}">${openRuns.has(r.id) ? (prevJobs[r.id] || "loading…") : ""}</div>
     </div>`).join("");
   el.querySelectorAll(".run-head").forEach(h => h.onclick = (e) => {
     if (e.target.tagName === "A") return;
