@@ -252,3 +252,90 @@ def create_work_item(
 def _web_url(org_url: str, project: str, wid, payload: dict) -> str:
     link = (((payload.get("_links") or {}).get("html") or {}).get("href"))
     return link or f"{org_url}/{project}/_workitems/edit/{wid}"
+
+
+def _auth_header(pat: str) -> str:
+    return "Basic " + base64.b64encode(f":{pat.strip()}".encode("utf-8")).decode("ascii")
+
+
+def _api_get(url: str, pat: str, timeout: int = 10) -> dict:
+    request = urllib.request.Request(
+        url, headers={"Authorization": _auth_header(pat), "Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+# States that mean a subtask is finished — a new failure should open/append, not dedupe.
+_CLOSED_STATES = {"closed", "done", "resolved", "removed", "completed"}
+
+
+def find_open_regression_child(
+    *, org_url: str, project: str, pat: str, parent_id: str,
+    tag: str = "regression", timeout: int = 10,
+) -> str:
+    """Return the id of an OPEN regression subtask already linked under parent_id, or
+    '' if none — so a repeated failure updates the existing subtask instead of piling
+    on new ones. Best-effort: any API error returns '' (fall back to creating one)."""
+    org_url = org_url.strip().rstrip("/")
+    project = project.strip()
+    pat = pat.strip()
+    parent_id = str(parent_id).strip()
+    if not (org_url and project and pat and parent_id):
+        return ""
+
+    try:
+        parent = _api_get(
+            f"{org_url}/{project}/_apis/wit/workitems/{parent_id}?$expand=relations&api-version=7.1",
+            pat, timeout)
+    except Exception:
+        return ""
+
+    child_ids = []
+    for rel in parent.get("relations", []) or []:
+        if rel.get("rel") == "System.LinkTypes.Hierarchy-Forward":  # Forward = children
+            cid = (rel.get("url") or "").rstrip("/").split("/")[-1]
+            if cid.isdigit():
+                child_ids.append(cid)
+    if not child_ids:
+        return ""
+
+    try:
+        fields = "System.State,System.Tags,System.Title"
+        batch = _api_get(
+            f"{org_url}/{project}/_apis/wit/workitems?ids={','.join(child_ids[:200])}"
+            f"&fields={fields}&api-version=7.1", pat, timeout)
+    except Exception:
+        return ""
+
+    for wi in batch.get("value", []) or []:
+        f = wi.get("fields", {}) or {}
+        state = str(f.get("System.State", "")).lower()
+        tags = str(f.get("System.Tags", "")).lower()
+        title = str(f.get("System.Title", "")).lower()
+        is_regression = tag.lower() in tags or "regression tests failing" in title
+        if is_regression and state not in _CLOSED_STATES:
+            return str(wi.get("id"))
+    return ""
+
+
+def add_comment(
+    *, org_url: str, project: str, pat: str, work_item_id: str, text: str, timeout: int = 10,
+) -> bool:
+    """Append a discussion comment to a work item. Returns True on success."""
+    org_url = org_url.strip().rstrip("/")
+    project = project.strip()
+    if not (org_url and project and pat and str(work_item_id).strip()):
+        return False
+    url = (f"{org_url}/{project}/_apis/wit/workItems/{work_item_id}/comments"
+           "?api-version=7.1-preview.3")
+    body = json.dumps({"text": text}).encode("utf-8")
+    request = urllib.request.Request(
+        url, data=body, method="POST",
+        headers={"Authorization": _auth_header(pat), "Content-Type": "application/json",
+                 "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            response.read()
+        return True
+    except Exception:
+        return False

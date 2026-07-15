@@ -4,8 +4,10 @@
 Invoked from CI (regression.yml) on failure. If the HEAD commit references a work
 item (AB#1234 / ADO-1234) — or AZDO_WORK_ITEM_ID is set — the failure is created as a
 CHILD subtask (type ADO_SUBTASK_TYPE, default "Task") of that ticket, so it lands on
-the ticket that drove the change. With no referenced ticket it falls back to a
-standalone item (type ADO_BUG_TYPE, default "Bug").
+the ticket that drove the change. If an OPEN regression subtask already exists under
+that ticket, it comments on it instead of creating a duplicate (so repeated pushes,
+re-runs, or develop+main runs don't pile up). With no referenced ticket it falls back
+to a standalone item (type ADO_BUG_TYPE, default "Bug").
 
 Assignee precedence:
   1. ADO_ASSIGNEE env — an explicit person's email/UPN (the manual override)
@@ -25,7 +27,10 @@ import sys
 # Import ado.py directly (not via the `testgen` package, whose __init__ pulls in
 # heavy deps like openai/langgraph that CI's failure step shouldn't need).
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "testgen"))
-from ado import extract_work_item_id, get_work_item_assignee, create_work_item  # noqa: E402
+from ado import (  # noqa: E402
+    extract_work_item_id, get_work_item_assignee, create_work_item,
+    find_open_regression_child, add_comment,
+)
 
 
 def _git(args):
@@ -82,7 +87,18 @@ def main() -> int:
     )
 
     if parent_id:
-        # Attach the failure to the ticket that drove the change, as a subtask.
+        # Dedupe: if an open regression subtask already exists under the ticket, comment
+        # on it instead of creating another (repeated pushes / re-runs / develop+main).
+        existing = find_open_regression_child(org_url=org, project=project, pat=pat, parent_id=parent_id)
+        if existing:
+            note = (f"Regression failed again for {component}.\n"
+                    f"Commit: {sha}" + (f"  ({commit_url})" if commit_url else "") + "\n"
+                    + (f"Workflow run: {run_url}" if run_url else ""))
+            ok = add_comment(org_url=org, project=project, pat=pat, work_item_id=existing, text=note)
+            print(f"Regression subtask #{existing} already open under AB#{parent_id} — "
+                  f"{'commented the new failure' if ok else 'comment failed'} instead of creating a duplicate.")
+            return 0
+        # Otherwise attach the failure to the ticket that drove the change, as a subtask.
         result = create_work_item(
             org_url=org, project=project, pat=pat,
             title=title, description=description,
