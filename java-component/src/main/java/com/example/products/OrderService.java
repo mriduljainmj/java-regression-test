@@ -18,7 +18,7 @@ public class OrderService {
     private static final double LOYALTY_DISCOUNT = 0.10;
 
     // Orders above this total (after discount) are rejected.
-    private static final double ORDER_TOTAL_CAP = 5000.00;
+    private static final double ORDER_TOTAL_CAP = 3000.00;
 
     private final ProductService productService;
     private final Map<Long, Order> store = new ConcurrentHashMap<>();
