@@ -1400,8 +1400,7 @@ def create_pull_request(state: TestGenState) -> TestGenState:
             *[f"- `{f}`" for f in state["written_files"]],
             "",
             "Please review the scenarios before merging. Regression runs automatically after merge.",
-            "",
-            "🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+            ""
         ])
         body = "\n".join(body_parts)
         pr_url = _run(

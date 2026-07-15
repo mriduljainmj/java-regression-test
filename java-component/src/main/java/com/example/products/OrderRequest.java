@@ -11,7 +11,7 @@ public class OrderRequest {
 
     @NotNull(message = "quantity is required")
     @Min(value = 1, message = "quantity must be at least 1")
-    @Max(value = 200, message = "quantity must not exceed 100")
+    @Max(value = 300, message = "quantity must not exceed 300")
     private Integer quantity;
 
     private boolean loyaltyMember;
