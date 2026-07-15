@@ -162,14 +162,20 @@ def create_work_item(
     work_item_type: str = "Bug",
     assigned_to: str = "",
     tags: str = "",
+    parent_id: str = "",
     timeout: int = 15,
 ) -> str:
     """Create an ADO work item and return a human-readable result line.
+
+    When parent_id is given the item is created as a CHILD (subtask) of that work
+    item via a Hierarchy-Reverse link, so a regression failure attaches to the ticket
+    that drove the change instead of spawning a standalone bug.
 
     Best-effort: returns a readable message on any failure instead of raising, so a
     CI failure-handler never masks the original test failure. If the assignee cannot
     be resolved by ADO, the item is created unassigned rather than failing outright.
     """
+    parent_id = str(parent_id).strip()
     org_url = org_url.strip().rstrip("/")
     project = project.strip()
     pat = pat.strip()
@@ -194,6 +200,11 @@ def create_work_item(
             ops.append({"op": "add", "path": "/fields/System.Tags", "value": tags})
         if include_assignee and assigned_to:
             ops.append({"op": "add", "path": "/fields/System.AssignedTo", "value": assigned_to})
+        if parent_id:
+            ops.append({"op": "add", "path": "/relations/-", "value": {
+                "rel": "System.LinkTypes.Hierarchy-Reverse",  # link new item AS A CHILD of parent
+                "url": f"{org_url}/_apis/wit/workItems/{parent_id}",
+            }})
         return json.dumps(ops).encode("utf-8")
 
     def _post(body: bytes) -> dict:
@@ -223,8 +234,9 @@ def create_work_item(
             try:
                 payload = _post(_patch(include_assignee=False))
                 wid = payload.get("id")
-                return (f"Created ADO {work_item_type} {wid} (unassigned — could not resolve "
-                        f"'{assigned_to}'): {_web_url(org_url, project, wid, payload)}")
+                parent_note = f" as a subtask of #{parent_id}" if parent_id else ""
+                return (f"Created ADO {work_item_type} {wid}{parent_note} (unassigned — could not "
+                        f"resolve '{assigned_to}'): {_web_url(org_url, project, wid, payload)}")
             except Exception as exc2:  # pragma: no cover
                 return f"Failed to create ADO work item: {exc2}"
         return f"Failed to create ADO work item: HTTP {exc.code} {detail}"
@@ -233,7 +245,8 @@ def create_work_item(
 
     wid = payload.get("id")
     assignee_note = f" assigned to {assigned_to}" if assigned_to else " (unassigned)"
-    return f"Created ADO {work_item_type} {wid}{assignee_note}: {_web_url(org_url, project, wid, payload)}"
+    parent_note = f" as a subtask of #{parent_id}" if parent_id else ""
+    return f"Created ADO {work_item_type} {wid}{parent_note}{assignee_note}: {_web_url(org_url, project, wid, payload)}"
 
 
 def _web_url(org_url: str, project: str, wid, payload: dict) -> str:

@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""Create an Azure DevOps bug when the regression suite fails.
+"""Log an Azure DevOps subtask when the regression suite fails.
 
-Invoked from CI (regression.yml) on failure. Assignee precedence:
+Invoked from CI (regression.yml) on failure. If the HEAD commit references a work
+item (AB#1234 / ADO-1234) — or AZDO_WORK_ITEM_ID is set — the failure is created as a
+CHILD subtask (type ADO_SUBTASK_TYPE, default "Task") of that ticket, so it lands on
+the ticket that drove the change. With no referenced ticket it falls back to a
+standalone item (type ADO_BUG_TYPE, default "Bug").
+
+Assignee precedence:
   1. ADO_ASSIGNEE env — an explicit person's email/UPN (the manual override)
-  2. the assignee of the work item referenced in the HEAD commit (AB#1234 / ADO-1234)
+  2. the assignee of the parent/referenced work item
   3. the HEAD commit author's email
 
 Skips quietly (exit 0) if ADO credentials are not configured, so it never masks the
@@ -48,15 +54,15 @@ def main() -> int:
 
     head_message = _git(["log", "-1", "--format=%B", sha])
     author_email = _git(["log", "-1", "--format=%ae", sha])
-    work_item_id = os.environ.get("AZDO_WORK_ITEM_ID", "").strip() or (extract_work_item_id(head_message) or "")
+    parent_id = os.environ.get("AZDO_WORK_ITEM_ID", "").strip() or (extract_work_item_id(head_message) or "")
 
     # Resolve assignee by precedence.
     assignee = os.environ.get("ADO_ASSIGNEE", "").strip()
     source = "ADO_ASSIGNEE override" if assignee else ""
-    if not assignee and work_item_id:
-        assignee = get_work_item_assignee(org_url=org, project=project, pat=pat, work_item_id=work_item_id)
+    if not assignee and parent_id:
+        assignee = get_work_item_assignee(org_url=org, project=project, pat=pat, work_item_id=parent_id)
         if assignee:
-            source = f"assignee of AB#{work_item_id}"
+            source = f"assignee of AB#{parent_id}"
     if not assignee and author_email:
         assignee = author_email
         source = "commit author"
@@ -68,19 +74,31 @@ def main() -> int:
             "",
             f"Commit: {sha}" + (f"  ({commit_url})" if commit_url else ""),
             f"Workflow run (logs + test-report artifacts): {run_url}" if run_url else "",
-            f"Related work item: AB#{work_item_id}" if work_item_id else "",
+            f"Parent work item: AB#{parent_id}" if parent_id else "",
             "",
             "Please open the workflow run above, review the failing scenarios in the "
             "uploaded test report, and either fix the code or update the affected tests.",
         ] if line != "" or True  # keep blank separators
     )
 
-    result = create_work_item(
-        org_url=org, project=project, pat=pat,
-        title=title, description=description,
-        work_item_type=os.environ.get("ADO_BUG_TYPE", "Bug"),
-        assigned_to=assignee, tags="regression; automated",
-    )
+    if parent_id:
+        # Attach the failure to the ticket that drove the change, as a subtask.
+        result = create_work_item(
+            org_url=org, project=project, pat=pat,
+            title=title, description=description,
+            work_item_type=os.environ.get("ADO_SUBTASK_TYPE", "Task"),
+            assigned_to=assignee, tags="regression; automated",
+            parent_id=parent_id,
+        )
+    else:
+        # No referenced ticket to attach to — fall back to a standalone work item.
+        print("ℹ️  No AB#/ADO- work item referenced in the commit — creating a standalone item.")
+        result = create_work_item(
+            org_url=org, project=project, pat=pat,
+            title=title, description=description,
+            work_item_type=os.environ.get("ADO_BUG_TYPE", "Bug"),
+            assigned_to=assignee, tags="regression; automated",
+        )
     print(result)
     print(f"(assignee: {assignee or 'unassigned'}{f' — via {source}' if source else ''})")
     return 0
