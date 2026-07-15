@@ -1,0 +1,91 @@
+<svg width="680" height="1240" viewBox="0 0 680 1240" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>From code push to reviewed tests — the full automated flow</title>
+<desc>A developer pushes an API change; in parallel a knowledge-base doc is refreshed. The AI agent detects the language, gathers context, writes and validates tests, then runs them, self-correcting up to three times. It opens a pull request that gets an automated regression check and a QA review; QA can send it back for changes. On approval it merges, then a regression safety net runs. If it passes, code and tests are in sync. If it fails, it checks whether a regression subtask is already open on the ticket: if none it creates and assigns one; if one is already open it comments on that instead of creating a duplicate.</desc>
+<style>
+  svg { background: #ffffff; }
+  text { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .th { font-size: 14px; font-weight: 500; fill: #222; }
+  .ts { font-size: 12px; fill: #5f6b7a; }
+  .c-blue rect  { fill: #e8f0fe; stroke: #4285f4; stroke-width: 1.5; }
+  .c-blue .th   { fill: #1a56c4; }
+  .c-gray rect  { fill: #f1f3f5; stroke: #aeb6bf; stroke-width: 1.5; }
+  .c-gray .th   { fill: #343a40; }
+  .c-teal rect  { fill: #e2f5f1; stroke: #0d9488; stroke-width: 1.5; }
+  .c-teal .th   { fill: #0f766e; }
+  .c-green rect { fill: #e6f4ea; stroke: #34a853; stroke-width: 1.5; }
+  .c-green .th  { fill: #1e7e34; }
+  .c-red rect   { fill: #fdecea; stroke: #e5484d; stroke-width: 1.5; }
+  .c-red .th    { fill: #b02a37; }
+</style>
+<defs>
+  <marker id="ah" markerWidth="9" markerHeight="9" refX="6.5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#8a94a6"/></marker>
+</defs>
+
+<text class="th" x="40" y="28" text-anchor="start">From code push to reviewed tests</text>
+
+<!-- spine arrows -->
+<line x1="340" y1="102" x2="340" y2="130" stroke="#8a94a6" stroke-width="1.5" marker-end="url(#ah)"/>
+<line x1="340" y1="182" x2="340" y2="210" stroke="#8a94a6" stroke-width="1.5" marker-end="url(#ah)"/>
+<line x1="340" y1="262" x2="340" y2="290" stroke="#8a94a6" stroke-width="1.5" marker-end="url(#ah)"/>
+<line x1="340" y1="342" x2="340" y2="370" stroke="#8a94a6" stroke-width="1.5" marker-end="url(#ah)"/>
+<line x1="340" y1="422" x2="340" y2="450" stroke="#8a94a6" stroke-width="1.5" marker-end="url(#ah)"/>
+<line x1="340" y1="502" x2="340" y2="566" stroke="#34a853" stroke-width="1.5" marker-end="url(#ah)"/>
+<text class="ts" x="350" y="536" text-anchor="start">pass</text>
+<line x1="340" y1="618" x2="340" y2="646" stroke="#8a94a6" stroke-width="1.5" marker-end="url(#ah)"/>
+<line x1="340" y1="698" x2="340" y2="726" stroke="#8a94a6" stroke-width="1.5" marker-end="url(#ah)"/>
+<line x1="340" y1="778" x2="340" y2="826" stroke="#34a853" stroke-width="1.5" marker-end="url(#ah)"/>
+<text class="ts" x="350" y="805" text-anchor="start">approved</text>
+<line x1="340" y1="878" x2="340" y2="906" stroke="#8a94a6" stroke-width="1.5" marker-end="url(#ah)"/>
+
+<!-- parallel: knowledge base -->
+<path d="M470,76 L565,76 L565,130" fill="none" stroke="#8a94a6" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ah)"/>
+<text class="ts" x="486" y="112" text-anchor="start">in parallel</text>
+
+<!-- self-correct loop -->
+<path d="M210,476 L176,476 L176,316 L210,316" fill="none" stroke="#e5484d" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ah)"/>
+<text class="ts" x="48" y="392" text-anchor="start">on failure:</text>
+<text class="ts" x="48" y="408" text-anchor="start">rewrite, up to 3x</text>
+
+<!-- QA change loop -->
+<path d="M470,752 L512,752 L512,592 L470,592" fill="none" stroke="#0d9488" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ah)"/>
+<text class="ts" x="518" y="668" text-anchor="start">if QA wants</text>
+<text class="ts" x="518" y="684" text-anchor="start">changes</text>
+
+<!-- pass / fail fork -->
+<line x1="340" y1="958" x2="168" y2="1006" stroke="#34a853" stroke-width="1.5" marker-end="url(#ah)"/>
+<text class="ts" x="250" y="986" text-anchor="start">pass</text>
+<line x1="340" y1="958" x2="472" y2="1006" stroke="#e5484d" stroke-width="1.5" marker-end="url(#ah)"/>
+<text class="ts" x="424" y="986" text-anchor="end">fail</text>
+
+<!-- dedupe branch -->
+<line x1="445" y1="1058" x2="410" y2="1116" stroke="#e5484d" stroke-width="1.5" marker-end="url(#ah)"/>
+<text class="ts" x="392" y="1092" text-anchor="end">none open</text>
+<line x1="520" y1="1058" x2="565" y2="1116" stroke="#e5484d" stroke-width="1.5" marker-end="url(#ah)"/>
+<text class="ts" x="540" y="1092" text-anchor="start">already open</text>
+
+<!-- nodes -->
+<g class="c-blue"><rect x="210" y="50" width="260" height="52" rx="10"/><text class="th" x="340" y="72" text-anchor="middle">Developer pushes code</text><text class="ts" x="340" y="90" text-anchor="middle">an API change</text></g>
+<g class="c-gray"><rect x="490" y="130" width="150" height="52" rx="10"/><text class="th" x="565" y="152" text-anchor="middle">Knowledge base</text><text class="ts" x="565" y="170" text-anchor="middle">auto-updated doc</text></g>
+<g class="c-gray"><rect x="210" y="130" width="260" height="52" rx="10"/><text class="th" x="340" y="152" text-anchor="middle">AI detects the change</text><text class="ts" x="340" y="170" text-anchor="middle">Java or .NET</text></g>
+<g class="c-gray"><rect x="210" y="210" width="260" height="52" rx="10"/><text class="th" x="340" y="232" text-anchor="middle">Gathers full context</text><text class="ts" x="340" y="250" text-anchor="middle">code, tests, ticket, rules</text></g>
+<g class="c-gray"><rect x="210" y="290" width="260" height="52" rx="10"/><text class="th" x="340" y="312" text-anchor="middle">Writes / updates the tests</text><text class="ts" x="340" y="330" text-anchor="middle">scenarios + step code</text></g>
+<g class="c-gray"><rect x="210" y="370" width="260" height="52" rx="10"/><text class="th" x="340" y="392" text-anchor="middle">Validates the tests</text><text class="ts" x="340" y="410" text-anchor="middle">structure &amp; coverage</text></g>
+<g class="c-gray"><rect x="210" y="450" width="260" height="52" rx="10"/><text class="th" x="340" y="472" text-anchor="middle">Runs the tests</text><text class="ts" x="340" y="490" text-anchor="middle">do they all pass?</text></g>
+<g class="c-green"><rect x="210" y="566" width="260" height="52" rx="10"/><text class="th" x="340" y="588" text-anchor="middle">Opens a pull request</text><text class="ts" x="340" y="606" text-anchor="middle">with a pass / fail status</text></g>
+<g class="c-gray"><rect x="210" y="646" width="260" height="52" rx="10"/><text class="th" x="340" y="668" text-anchor="middle">Regression check on the PR</text><text class="ts" x="340" y="686" text-anchor="middle">catches a broken PR early</text></g>
+<g class="c-teal"><rect x="210" y="726" width="260" height="52" rx="10"/><text class="th" x="340" y="748" text-anchor="middle">QA reviews the PR</text><text class="ts" x="340" y="766" text-anchor="middle">approve or request a change</text></g>
+<g class="c-green"><rect x="210" y="826" width="260" height="52" rx="10"/><text class="th" x="340" y="848" text-anchor="middle">Approved — merge</text><text class="ts" x="340" y="866" text-anchor="middle">tests join the suite</text></g>
+<g class="c-gray"><rect x="210" y="906" width="260" height="52" rx="10"/><text class="th" x="340" y="928" text-anchor="middle">Regression safety net runs</text><text class="ts" x="340" y="946" text-anchor="middle">on the protected branch</text></g>
+
+<g class="c-green"><rect x="40" y="1006" width="230" height="52" rx="10"/><text class="th" x="155" y="1028" text-anchor="middle">Code &amp; tests in sync</text><text class="ts" x="155" y="1046" text-anchor="middle">release with confidence</text></g>
+<g class="c-red"><rect x="320" y="1006" width="320" height="52" rx="10"/><text class="th" x="480" y="1028" text-anchor="middle">Is a subtask already open?</text><text class="ts" x="480" y="1046" text-anchor="middle">on the ticket that drove the change</text></g>
+<g class="c-red"><rect x="322" y="1116" width="162" height="52" rx="10"/><text class="th" x="403" y="1138" text-anchor="middle">Create a subtask</text><text class="ts" x="403" y="1156" text-anchor="middle">and assign it</text></g>
+<g class="c-red"><rect x="500" y="1116" width="140" height="52" rx="10"/><text class="th" x="570" y="1138" text-anchor="middle">Comment on it</text><text class="ts" x="570" y="1156" text-anchor="middle">no duplicate</text></g>
+
+<!-- legend -->
+<g class="c-blue"><rect x="40" y="1198" width="14" height="14" rx="3"/></g><text class="ts" x="60" y="1209" text-anchor="start">start</text>
+<g class="c-gray"><rect x="108" y="1198" width="14" height="14" rx="3"/></g><text class="ts" x="128" y="1209" text-anchor="start">automated</text>
+<g class="c-teal"><rect x="210" y="1198" width="14" height="14" rx="3"/></g><text class="ts" x="230" y="1209" text-anchor="start">human (QA)</text>
+<g class="c-green"><rect x="320" y="1198" width="14" height="14" rx="3"/></g><text class="ts" x="340" y="1209" text-anchor="start">success</text>
+<g class="c-red"><rect x="410" y="1198" width="14" height="14" rx="3"/></g><text class="ts" x="430" y="1209" text-anchor="start">attention</text>
+</svg>
