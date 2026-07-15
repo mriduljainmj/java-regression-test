@@ -12,13 +12,13 @@ _This file is the AI's memory of the project. When loading this project, read th
 
 ## 🤖 Auto-Generated Snapshot
 
-_Last updated: 2026-07-15 04:20:14 UTC — regenerated automatically by `update-project-mindmap.py`. Controller criticality and the skip line below are QA-owned and preserved across regenerations; everything else is overwritten._
+*Last updated: 2026-07-15 04:35:52 UTC — regenerated automatically by `update-project-mindmap.py`. Controller criticality and the skip line below are QA-owned and preserved across regenerations; everything else is overwritten.*
 
 ### Criticality & skip
 
-_QA: set each controller's criticality (LOW / MEDIUM / HIGH) in the list below, and list the level(s) to skip here (comma-separated, or NONE). A controller whose criticality is skipped is NOT test-generated when it changes._
+*QA: set each controller's criticality (LOW / MEDIUM / HIGH) in the list below, and list the level(s) to skip here (comma-separated, or NONE). When a push touches only skipped-criticality controllers, BOTH test generation and the regression run are skipped for it.*
 
-**Skip test generation for criticality:** LOW
+**Skip criticality (generation + regression):** LOW
 
 ### API Endpoints
 

@@ -41,24 +41,39 @@ jobs:
               - '**/*.cs'
               - '**/*.csproj'
 
-      - if: steps.changes.outputs.java == 'true'
+      # Criticality gate: skip the suite when this push only touches controllers whose
+      # criticality is set to skip in PROJECT.md (QA-owned). Non-controller / mixed
+      # changes still run. Only push events are gated; PR checks always run in full.
+      - name: Criticality gate
+        id: gate
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            CHANGED="$(git show --name-only --pretty='' "${{ github.sha }}")"
+            SKIP="$(CHANGED_FILES="$CHANGED" python3 testgen-agent/criticality_gate.py)"
+          else
+            SKIP="false"
+          fi
+          echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
+          echo "criticality gate → skip=$SKIP"
+
+      - if: steps.changes.outputs.java == 'true' && steps.gate.outputs.skip != 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
           cache: maven
 
-      - if: steps.changes.outputs.dotnet == 'true'
+      - if: steps.changes.outputs.dotnet == 'true' && steps.gate.outputs.skip != 'true'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "9.0.x"
 
       - name: Run Java regression suite
-        if: steps.changes.outputs.java == 'true'
+        if: steps.changes.outputs.java == 'true' && steps.gate.outputs.skip != 'true'
         run: mvn -f java-component/pom.xml --batch-mode verify
 
       - name: Run .NET regression suite
-        if: steps.changes.outputs.dotnet == 'true'
+        if: steps.changes.outputs.dotnet == 'true' && steps.gate.outputs.skip != 'true'
         working-directory: dotnet-component
         run: |
           echo "Cleaning stale build artifacts to avoid nested output-path pollution..."
@@ -96,7 +111,7 @@ jobs:
           echo ".NET tests passed"
 
       - name: Upload Cucumber report (Java)
-        if: always() && steps.changes.outputs.java == 'true'
+        if: always() && steps.changes.outputs.java == 'true' && steps.gate.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: cucumber-report-java
@@ -104,7 +119,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload .NET test results (TRX)
-        if: always() && steps.changes.outputs.dotnet == 'true'
+        if: always() && steps.changes.outputs.dotnet == 'true' && steps.gate.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: dotnet-test-results
@@ -112,7 +127,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload .NET BDD report (LivingDoc HTML)
-        if: always() && steps.changes.outputs.dotnet == 'true'
+        if: always() && steps.changes.outputs.dotnet == 'true' && steps.gate.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: cucumber-report-dotnet

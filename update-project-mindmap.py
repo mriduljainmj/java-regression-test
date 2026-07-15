@@ -170,8 +170,9 @@ class ProjectMindmapUpdater:
         return out
 
     def _existing_skip(self, content: str) -> str:
-        """Preserve QA's 'skip these criticalities' setting (tolerates the ** bold markers)."""
-        m = re.search(r'Skip test generation for criticality:\s*\**\s*([A-Za-z0-9, ]+)',
+        """Preserve QA's 'skip these criticalities' setting (tolerant of the ** bold
+        markers and of the older 'Skip test generation for criticality:' label)."""
+        m = re.search(r'Skip[^\n]*criticality[^\n:]*:\s*\**\s*([A-Za-z0-9, ]+)',
                       content, re.IGNORECASE)
         return m.group(1).strip() if m else "NONE"
 
@@ -187,10 +188,11 @@ class ProjectMindmapUpdater:
             "### Criticality & skip",
             "",
             "*QA: set each controller's criticality (LOW / MEDIUM / HIGH) in the list below, and "
-            "list the level(s) to skip here (comma-separated, or NONE). A controller whose "
-            "criticality is skipped is NOT test-generated when it changes.*",
+            "list the level(s) to skip here (comma-separated, or NONE). When a push touches only "
+            "skipped-criticality controllers, BOTH test generation and the regression run are "
+            "skipped for it.*",
             "",
-            f"**Skip test generation for criticality:** {skip_setting or 'NONE'}",
+            f"**Skip criticality (generation + regression):** {skip_setting or 'NONE'}",
             "",
             "### API Endpoints", "",
         ]
