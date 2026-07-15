@@ -41,7 +41,7 @@ if _FORCED_PROJECT_TYPE and _FORCED_PROJECT_TYPE not in {"java", "dotnet"}:
 # Safety cap on total model calls (structural retries + rotation). Set high
 # enough that the execution-feedback rounds below never trip it.
 # Increased to 12 for C# syntax correction retries (6 is insufficient for @Given → [Given] fixes)
-MAX_ATTEMPTS = int(os.environ.get("TESTGEN_MAX_ATTEMPTS", "6"))
+MAX_ATTEMPTS = int(os.environ.get("TESTGEN_MAX_ATTEMPTS", "3"))
 
 # Execution-feedback loop: run the generated tests and feed failures back to the
 # model, at most this many times (the user-facing "max 3 retries").
