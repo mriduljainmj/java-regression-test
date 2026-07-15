@@ -12,31 +12,37 @@ _This file is the AI's memory of the project. When loading this project, read th
 
 ## 🤖 Auto-Generated Snapshot
 
-*Last updated: 2026-07-14 17:49:31 UTC — regenerated automatically by `update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*
+*Last updated: 2026-07-15 04:20:14 UTC — regenerated automatically by `update-project-mindmap.py`. Controller criticality and the skip line below are QA-owned and preserved across regenerations; everything else is overwritten.*
+
+### Criticality & skip
+
+*QA: set each controller's criticality (LOW / MEDIUM / HIGH) in the list below, and list the level(s) to skip here (comma-separated, or NONE). A controller whose criticality is skipped is NOT test-generated when it changes.*
+
+**Skip test generation for criticality:** NONE
 
 ### API Endpoints
 
 **Java (Spring Boot)**
 
-- `OrderController`
+- `OrderController` (java) — criticality: MEDIUM
   - `POST /api/v1/orders` → placeOrder()
   - `GET /api/v1/orders/{id}` → getOrder()
-- `ProductController`
-  - `GET /api/v1/product` → getAllProducts()
-  - `GET /api/v1/product/{id}` → getProduct()
-  - `POST /api/v1/product` → createProduct()
-  - `PUT /api/v1/product/{id}` → updateProduct()
-  - `DELETE /api/v1/product/{id}` → deleteProduct()
-- `ReviewController`
+- `ProductController` (java) — criticality: MEDIUM
+  - `GET /api/v1/products` → getAllProducts()
+  - `GET /api/v1/products/{id}` → getProduct()
+  - `POST /api/v1/products` → createProduct()
+  - `PUT /api/v1/products/{id}` → updateProduct()
+  - `DELETE /api/v1/products/{id}` → deleteProduct()
+- `ReviewController` (java) — criticality: MEDIUM
   - `POST /api/v1/products/{productId}/reviews` → addReview()
   - `GET /api/v1/products/{productId}/rating` → getRating()
 
 **.NET (ASP.NET Core)**
 
-- `PricingOrchestrationController`
+- `PricingOrchestrationController` (dotnet) — criticality: MEDIUM
   - `GET /api/discount-policy` → GetDiscountPolicy()
   - `POST /api/order-total-from-policy` → CalculateOrderTotalFromPolicy()
-- `ProductController`
+- `ProductController` (dotnet) — criticality: MEDIUM
   - `GET /api/products` → GetAll()
   - `GET /api/products/in-stock` → GetInStock()
   - `GET /api/products/inventory-count` → GetInventoryCount()
@@ -48,9 +54,9 @@ _This file is the AI's memory of the project. When loading this project, read th
   - `DELETE /api/products/{id}` → Delete()
   - `PATCH /api/products/{id}/stock` → UpdateStock()
   - `POST /api/products/{id}/calculate-order-total` → CalculateOrderTotal()
-- `UserController`
+- `UserController` (dotnet) — criticality: MEDIUM
   - `GET /api/GetUserById` → GetUserById()
-- `WeatherForecastController`
+- `WeatherForecastController` (dotnet) — criticality: MEDIUM
   - `GET /[controller]` → Get()
   - `GET /[controller]/today` → GetToday()
 

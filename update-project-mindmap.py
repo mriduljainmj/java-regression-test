@@ -158,13 +158,39 @@ class ProjectMindmapUpdater:
 
     # ----- rendering ----------------------------------------------------------
 
-    def _render_region(self, controllers, services, features) -> str:
+    def _existing_criticality(self, content: str) -> dict:
+        """Preserve QA's per-controller criticality across regenerations. Keyed by
+        'language:Class' because Java and .NET can share a class name (ProductController)."""
+        out = {}
+        for m in re.finditer(
+            r'`([A-Za-z0-9_]+)`\s*\((java|dotnet)\)\s*[—-]\s*criticality:\s*(HIGH|MEDIUM|LOW)',
+            content, re.IGNORECASE,
+        ):
+            out[f"{m.group(2).lower()}:{m.group(1)}"] = m.group(3).upper()
+        return out
+
+    def _existing_skip(self, content: str) -> str:
+        """Preserve QA's 'skip these criticalities' setting (tolerates the ** bold markers)."""
+        m = re.search(r'Skip test generation for criticality:\s*\**\s*([A-Za-z0-9, ]+)',
+                      content, re.IGNORECASE)
+        return m.group(1).strip() if m else "NONE"
+
+    def _render_region(self, controllers, services, features, criticality, skip_setting) -> str:
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         out = [
             AUTO_BEGIN, "",
             "## 🤖 Auto-Generated Snapshot", "",
             f"*Last updated: {ts} — regenerated automatically by "
-            f"`update-project-mindmap.py`. Do not edit inside this block; changes are overwritten.*",
+            f"`update-project-mindmap.py`. Controller criticality and the skip line below are "
+            f"QA-owned and preserved across regenerations; everything else is overwritten.*",
+            "",
+            "### Criticality & skip",
+            "",
+            "*QA: set each controller's criticality (LOW / MEDIUM / HIGH) in the list below, and "
+            "list the level(s) to skip here (comma-separated, or NONE). A controller whose "
+            "criticality is skipped is NOT test-generated when it changes.*",
+            "",
+            f"**Skip test generation for criticality:** {skip_setting or 'NONE'}",
             "",
             "### API Endpoints", "",
         ]
@@ -176,7 +202,8 @@ class ProjectMindmapUpdater:
             out.append(f"**{label}**")
             out.append("")
             for c in group:
-                out.append(f"- `{c['class']}`")
+                lvl = criticality.get(f"{c['language']}:{c['class']}", "MEDIUM")
+                out.append(f"- `{c['class']}` ({c['language']}) — criticality: {lvl}")
                 for ep in c["endpoints"]:
                     out.append(f"  - `{ep['method']} {ep['path']}` → {ep['handler']}()")
             out.append("")
@@ -247,8 +274,10 @@ class ProjectMindmapUpdater:
         print(f"🔍 Scanned: {len(controllers)} controllers ({ep_count} endpoints), "
               f"{len(services)} services, {len(features)} feature files.")
 
-        region = self._render_region(controllers, services, features)
         original = self.project_md.read_text()
+        criticality = self._existing_criticality(original)   # preserve QA edits
+        skip_setting = self._existing_skip(original)
+        region = self._render_region(controllers, services, features, criticality, skip_setting)
         rebuilt = self._insert_region(self._clean(original), region)
 
         if rebuilt == original:

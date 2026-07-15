@@ -196,6 +196,45 @@ def _resolve_base(repo: str, base: str, head: str) -> str:
     return _EMPTY_TREE
 
 
+def _load_criticality(repo: Path):
+    """Parse PROJECT.md for QA's per-controller criticality and the skip list.
+    Returns ({ControllerClass: 'HIGH'|'MEDIUM'|'LOW'}, {skipped levels})."""
+    path = repo / "PROJECT.md"
+    if not path.is_file():
+        return {}, set()
+    try:
+        content = path.read_text(errors="ignore")
+    except Exception:
+        return {}, set()
+    crit = {}
+    for m in re.finditer(
+        r'`([A-Za-z0-9_]+)`\s*\((java|dotnet)\)\s*[—-]\s*criticality:\s*(HIGH|MEDIUM|LOW)',
+        content, re.IGNORECASE,
+    ):
+        crit[f"{m.group(2).lower()}:{m.group(1)}"] = m.group(3).upper()
+    skip = set()
+    ms = re.search(r'Skip test generation for criticality:\s*\**\s*([A-Za-z0-9, ]+)',
+                   content, re.IGNORECASE)
+    if ms:
+        for tok in re.split(r'[,\s]+', ms.group(1).strip()):
+            if tok.upper() in ("LOW", "MEDIUM", "HIGH"):
+                skip.add(tok.upper())
+    return crit, skip
+
+
+def _touched_controllers(changed_files):
+    """Controllers among the changed files, keyed 'language:Class' to match PROJECT.md
+    (ProductController.java -> java:ProductController, .cs -> dotnet:ProductController)."""
+    out = []
+    for f in changed_files:
+        base = f.rsplit("/", 1)[-1]
+        if base.endswith("Controller.java"):
+            out.append(f"java:{base[:-5]}")
+        elif base.endswith("Controller.cs"):
+            out.append(f"dotnet:{base[:-3]}")
+    return out
+
+
 def collect_diff(state: TestGenState) -> TestGenState:
     """Compute the git diff between base and head and list changed files."""
     repo = state["repo_path"]
@@ -238,8 +277,24 @@ def collect_diff(state: TestGenState) -> TestGenState:
             "No Java or C# source changes between "
             f"{base} and {head}; nothing to generate tests for."
         )
-    else:
-        update["project_type"] = project_type
+        return update
+
+    # Criticality skip (QA-owned, in PROJECT.md): if EVERY controller touched by this
+    # change is set to a skipped criticality, don't generate tests for it.
+    crit_map, skip_levels = _load_criticality(Path(repo))
+    touched = _touched_controllers(changed_files)
+    if skip_levels and touched and all(crit_map.get(c, "MEDIUM") in skip_levels for c in touched):
+        levels = ", ".join(sorted(skip_levels))
+        detail = ", ".join(f"{c}={crit_map.get(c, 'MEDIUM')}" for c in touched)
+        logger.info("Skipping generation — changed controller(s) [%s] are in skipped criticality (%s)",
+                    detail, levels)
+        update["skipped_reason"] = (
+            f"Changed controller(s) {detail} are set to a skipped criticality ({levels}) "
+            "in PROJECT.md — test generation skipped."
+        )
+        return update
+
+    update["project_type"] = project_type
     return update
 
 
