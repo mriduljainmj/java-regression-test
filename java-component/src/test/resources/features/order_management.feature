@@ -57,4 +57,4 @@ Feature: Order management
       | payload                                 | message                                 |
       | {"productId": null, "quantity": 1}   | productId is required                   |
       | {"productId": 1, "quantity": 0}     | quantity must be at least 1             |
-      | {"productId": 1, "quantity": 201}   | quantity must not exceed 100            |
+      | {"productId": 1, "quantity": 301}   | quantity must not exceed 300            |
