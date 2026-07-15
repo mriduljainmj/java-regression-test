@@ -1024,12 +1024,14 @@ def validate_output(state: TestGenState) -> TestGenState:
         # proposed in this generation — or Cucumber will fail the PR with
         # undefined steps. Feed exact offenders back.
         if all_patterns:
+            glue_loc = ("dotnet-component/Tests/StepDefinitions/" if project_type == "dotnet"
+                        else "java-component/src/test/java/.../cucumber/")
             for step in find_undefined_steps(feature.gherkin_content, all_patterns):
                 message = (
                     f'{name}: step "{step}" matches no existing step definition. '
-                    "Rephrase it using one of the step patterns from the provided "
-                    "step definitions, or add the missing glue in a STEPDEF block under "
-                    "dotnet-component/Tests/ if this is a dotnet project."
+                    "Rephrase it to match one of the provided step patterns exactly "
+                    "(mind small wording differences like a missing \"of\"), or add the "
+                    f"missing glue in a STEPDEF block under {glue_loc}."
                 )
                 if "<" in step:
                     message += (

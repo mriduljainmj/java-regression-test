@@ -250,6 +250,12 @@ public class ProductStepDefinitions {
         assertThat(context.getLastResponse().jsonPath().getDouble("total"), closeTo(total, 0.001));
     }
 
+    // Alias without "of" — models commonly phrase it "an order total 190.00".
+    @Then("the response should contain an order total {double}")
+    public void theResponseShouldContainAnOrderTotal(double total) {
+        assertThat(context.getLastResponse().jsonPath().getDouble("total"), closeTo(total, 0.001));
+    }
+
     @Then("the response should contain a discount of {double} percent")
     public void theResponseShouldContainADiscountOfPercent(double percent) {
         assertThat(context.getLastResponse().jsonPath().getDouble("discountPercent"),
