@@ -50,11 +50,14 @@ jobs:
           if [ "${{ github.event_name }}" = "push" ]; then
             CHANGED="$(git show --name-only --pretty='' "${{ github.sha }}")"
             SKIP="$(CHANGED_FILES="$CHANGED" python3 testgen-agent/criticality_gate.py)"
+            HIGH="$(MODE=high CHANGED_FILES="$CHANGED" python3 testgen-agent/criticality_gate.py)"
           else
             SKIP="false"
+            HIGH="false"
           fi
           echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
-          echo "criticality gate → skip=$SKIP"
+          echo "high=$HIGH" >> "$GITHUB_OUTPUT"
+          echo "criticality gate → skip=$SKIP high=$HIGH"
 
       - if: steps.changes.outputs.java == 'true' && steps.gate.outputs.skip != 'true'
         uses: actions/setup-java@v4
@@ -69,11 +72,31 @@ jobs:
           dotnet-version: "9.0.x"
 
       - name: Run Java regression suite
+        id: java_tests
         if: steps.changes.outputs.java == 'true' && steps.gate.outputs.skip != 'true'
-        run: mvn -f java-component/pom.xml --batch-mode verify
+        continue-on-error: true
+        run: |
+          set +e
+          mvn -f java-component/pom.xml --batch-mode verify
+          TEST_RESULT=$?
+          set -e
+          if [ $TEST_RESULT -ne 0 ]; then
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+            if [ "${{ steps.gate.outputs.high }}" = "true" ]; then
+              echo "::error::High severity test failed (Java regression)."
+            else
+              echo "::error::Java regression tests failed"
+            fi
+            # Do not fail fast here; allow post-steps (artifacts/ADO) to run.
+            exit 0
+          fi
+          echo "failed=false" >> "$GITHUB_OUTPUT"
 
       - name: Run .NET regression suite
-        if: steps.changes.outputs.dotnet == 'true' && steps.gate.outputs.skip != 'true'
+        id: dotnet_tests
+        if: steps.changes.outputs.dotnet == 'true' && steps.gate.outputs.skip != 'true' && !(steps.java_tests.outputs.failed == 'true' && steps.gate.outputs.high == 'true')
+        continue-on-error: true
+        # Stop running additional test-suite steps if Java already failed with HIGH severity.
         working-directory: dotnet-component
         run: |
           echo "Cleaning stale build artifacts to avoid nested output-path pollution..."
@@ -105,9 +128,16 @@ jobs:
           fi
 
           if [ $TEST_RESULT -ne 0 ]; then
-            echo "::error::.NET tests failed"
-            exit $TEST_RESULT
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+            if [ "${{ steps.gate.outputs.high }}" = "true" ]; then
+              echo "::error::High severity test failed (.NET regression)."
+            else
+              echo "::error::.NET tests failed"
+            fi
+            # Do not fail fast here; allow post-steps (artifacts/ADO) to run.
+            exit 0
           fi
+          echo "failed=false" >> "$GITHUB_OUTPUT"
           echo ".NET tests passed"
 
       - name: Upload Cucumber report (Java)
@@ -140,12 +170,13 @@ jobs:
       # that drove the change (falls back to a standalone item if none is referenced).
       # Gated to push events so in-progress PR failures don't spam tickets.
       - name: Log ADO subtask on regression failure
-        if: ${{ failure() && github.event_name == 'push' }}
+        if: ${{ github.event_name == 'push' && (steps.java_tests.outputs.failed == 'true' || steps.dotnet_tests.outputs.failed == 'true') }}
         working-directory: testgen-agent
         env:
           AZDO_ORG_URL: ${{ secrets.AZDO_ORG_URL }}
           AZDO_PROJECT: ${{ secrets.AZDO_PROJECT }}
           AZDO_PAT: ${{ secrets.AZDO_PAT }}
+          REGRESSION_HIGH_SEVERITY: ${{ steps.gate.outputs.high }}
           # Optional: pin every regression subtask to one person (email/UPN). If unset,
           # it uses the parent ticket's assignee, then the commit author.
           ADO_ASSIGNEE: ${{ secrets.ADO_ASSIGNEE }}
@@ -158,3 +189,13 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_SHA: ${{ github.sha }}
         run: python3 report_regression_failure.py
+
+      - name: Finalize regression status
+        if: ${{ always() && (steps.java_tests.outputs.failed == 'true' || steps.dotnet_tests.outputs.failed == 'true') }}
+        run: |
+          if [ "${{ steps.gate.outputs.high }}" = "true" ]; then
+            echo "::error::High severity test failed."
+          else
+            echo "::error::Regression tests failed."
+          fi
+          exit 1

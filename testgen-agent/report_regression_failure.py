@@ -56,6 +56,7 @@ def main() -> int:
 
     run_url = f"{server}/{repo}/actions/runs/{run_id}" if repo and run_id else ""
     commit_url = f"{server}/{repo}/commit/{sha}" if repo and sha != "HEAD" else ""
+    is_high_severity = (os.environ.get("REGRESSION_HIGH_SEVERITY", "").strip().lower() == "true")
 
     head_message = _git(["log", "-1", "--format=%B", sha])
     author_email = _git(["log", "-1", "--format=%ae", sha])
@@ -72,10 +73,12 @@ def main() -> int:
         assignee = author_email
         source = "commit author"
 
-    title = f"Regression tests failing for {component}"
+    severity_prefix = "HIGH severity: " if is_high_severity else ""
+    title = f"{severity_prefix}Regression tests failing for {component}"
     description = "\n".join(
         line for line in [
             f"The automated regression suite failed for {component}.",
+            "Severity: HIGH" if is_high_severity else "Severity: STANDARD",
             "",
             f"Commit: {sha}" + (f"  ({commit_url})" if commit_url else ""),
             f"Workflow run (logs + test-report artifacts): {run_url}" if run_url else "",
@@ -91,7 +94,7 @@ def main() -> int:
         # on it instead of creating another (repeated pushes / re-runs / develop+main).
         existing = find_open_regression_child(org_url=org, project=project, pat=pat, parent_id=parent_id)
         if existing:
-            note = (f"Regression failed again for {component}.\n"
+            note = (("HIGH severity: " if is_high_severity else "") + f"Regression failed again for {component}.\n"
                     f"Commit: {sha}" + (f"  ({commit_url})" if commit_url else "") + "\n"
                     + (f"Workflow run: {run_url}" if run_url else ""))
             ok = add_comment(org_url=org, project=project, pat=pat, work_item_id=existing, text=note)

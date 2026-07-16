@@ -66,3 +66,10 @@ def should_skip(repo, changed_files) -> bool:
     crit, skip = load_criticality(repo)
     touched = touched_controllers(changed_files)
     return bool(skip and touched and all(crit.get(c, "MEDIUM") in skip for c in touched))
+
+
+def has_high_criticality_change(repo, changed_files) -> bool:
+    """True when any changed controller is marked HIGH in PROJECT.md."""
+    crit, _ = load_criticality(repo)
+    touched = touched_controllers(changed_files)
+    return any(crit.get(c, "MEDIUM") == "HIGH" for c in touched)
