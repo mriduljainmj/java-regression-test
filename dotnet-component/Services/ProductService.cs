@@ -71,7 +71,7 @@ namespace BP.Services
             else if (quantity >= 25)
                 discountPercent = 10;
             else if (quantity >= 10)
-                discountPercent = 3;
+                discountPercent = 6;
             
             double totalPrice = product.Price * quantity * (1 - (discountPercent / 100.0));
             return (totalPrice, discountPercent);
