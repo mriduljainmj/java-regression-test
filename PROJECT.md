@@ -42,7 +42,7 @@ _This file is the AI's memory of the project. When loading this project, read th
 - `PricingOrchestrationController` (dotnet) — criticality: MEDIUM
   - `GET /api/discount-policy` → GetDiscountPolicy()
   - `POST /api/order-total-from-policy` → CalculateOrderTotalFromPolicy()
-- `ProductController` (dotnet) — criticality: MEDIUM
+- `ProductController` (dotnet) — criticality: HIGH
   - `GET /api/products` → GetAll()
   - `GET /api/products/in-stock` → GetInStock()
   - `GET /api/products/inventory-count` → GetInventoryCount()
