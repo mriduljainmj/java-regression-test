@@ -12,7 +12,7 @@ _This file is the AI's memory of the project. When loading this project, read th
 
 ## 🤖 Auto-Generated Snapshot
 
-*Last updated: 2026-07-15 05:55:04 UTC — regenerated automatically by `update-project-mindmap.py`. Controller criticality and the skip line below are QA-owned and preserved across regenerations; everything else is overwritten.*
+*Last updated: 2026-07-17 07:12:24 UTC — regenerated automatically by `update-project-mindmap.py`. Controller criticality and the skip line below are QA-owned and preserved across regenerations; everything else is overwritten.*
 
 ### Criticality & skip
 
