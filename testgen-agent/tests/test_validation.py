@@ -134,6 +134,34 @@ class GlueValidationTest(unittest.TestCase):
         self.assertTrue(any("matches no existing step definition" in e
                             for e in out["validation_errors"]))
 
+    def test_dotnet_route_only_stepdef_update_is_allowed(self):
+        state = make_state(self.repo, GenerationResult(
+            impacted_endpoints=["POST /api/products/{id}/calculate-order-total"],
+            analysis_summary="route-only change; update glue for new endpoint path",
+            new_or_modified_features=[],
+            new_or_modified_step_definitions=[StepDefinitionFile(
+                file_name="dotnet-component/Tests/StepDefinitions/ProductManagementStepDefinitions.cs",
+                action="UPDATE",
+                java_content='''using System.Net.Http;
+using System.Threading.Tasks;
+using TechTalk.SpecFlow;
+
+[Binding]
+public class ProductManagementStepDefinitions {
+    [When(@"^a client POSTs /api/products/(\d+)/calculate-order-total with body$")]
+    public async Task WhenAClientPOSTsCalculateOrderTotalWithBody(string id, string body) {
+        var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+        await _httpClient.PostAsync($"/api/products/{id}/calculate-order-total", content);
+    }
+}
+''',
+            )],
+        ))
+        state["project_type"] = "dotnet"
+        state["git_diff"] = "M   dotnet-component/Services/ProductService.cs\n"
+        out = validate_output(state)
+        self.assertEqual(out["validation_errors"], [])
+
     def test_rewrite_dropping_existing_steps_is_flagged(self):
         # Whenever the file exists, dropping a step it currently has is an error —
         # regardless of the CREATE/UPDATE label the model put on it.

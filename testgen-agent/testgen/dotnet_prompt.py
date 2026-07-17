@@ -32,6 +32,11 @@ ENDPOINT PATHS LIVE IN THE STEP DEFINITIONS, NOT THE GHERKIN:
 - The .feature files describe behavior in business language and contain NO URLs — the
   actual request paths are built in the C# step definitions (e.g. the HttpClient calls
   like `GetAsync("api/products")`, `PostAsync("api/products/" + id, ...)`).
+- When an endpoint route changes or a new route is exercised, update the C# glue
+  file(s) under dotnet-component/Tests/StepDefinitions/ with the new path string.
+  Prefer reusing existing step wording whenever possible. The feature file can keep
+  the same business-level phrasing and should not be rewritten solely because the
+  underlying URL changed.
 - So when a controller's base path or a route CHANGES (e.g. api/products ->
   api/product, or [Route] changes), the fix is a STEPDEF block, NOT a feature edit:
   return the updated step-definition file(s) (full content) with the new path, and do
@@ -46,6 +51,9 @@ Hard constraints:
   see the rule above.)
 - Reuse existing step wording whenever possible.
 - If a step has no existing binding, include full C# glue in a STEPDEF block.
+- If the change is purely a route/path adjustment for an existing endpoint, do not
+  rewrite the feature file; instead update the existing step-definition file(s)
+  with the new URL and preserve every existing step definition in that file.
 - C# syntax only: [Given]/[When]/[Then] (never @Given/@When/@Then).
 - Use ScenarioContext (or existing test context pattern) for shared state.
 - Return full file content for CREATE and UPDATE blocks.

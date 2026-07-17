@@ -67,11 +67,11 @@ namespace BP.Services
             // Tiered discount: 5% for 10+, 10% for 25+, 15% for 50+
             int discountPercent = 0;
             if (quantity >= 50)
-                discountPercent = 13;
+                discountPercent = 15;
             else if (quantity >= 25)
                 discountPercent = 10;
             else if (quantity >= 10)
-                discountPercent = 5;
+                discountPercent = 3;
             
             double totalPrice = product.Price * quantity * (1 - (discountPercent / 100.0));
             return (totalPrice, discountPercent);

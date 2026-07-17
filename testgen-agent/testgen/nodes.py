@@ -1031,7 +1031,9 @@ def validate_output(state: TestGenState) -> TestGenState:
                     f'{name}: step "{step}" matches no existing step definition. '
                     "Rephrase it to match one of the provided step patterns exactly "
                     "(mind small wording differences like a missing \"of\"), or add the "
-                    f"missing glue in a STEPDEF block under {glue_loc}."
+                    f"missing glue in a STEPDEF block under {glue_loc}. "
+                    "If this is a route/path change, update the existing C# step definition "
+                    "with the new URL rather than rewriting the feature step wording."
                 )
                 if "<" in step:
                     message += (
