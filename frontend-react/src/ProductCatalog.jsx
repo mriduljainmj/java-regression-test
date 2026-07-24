@@ -18,7 +18,7 @@ function validateProduct(name, priceRaw) {
   const trimmed = (name || "").trim();
   if (trimmed === "") return "name must not be blank";
   if (trimmed.length > NAME_MAX) return "name must not exceed 100 characters";
-  if (trimmed.length < 3) return "name must be at least 3 characters";
+  if (trimmed.length < 3) return "name must be at least 5 characters";
   if ((priceRaw || "").trim() === "") return "price is required";
   const price = Number(priceRaw);
   if (!Number.isFinite(price)) return "price is required";

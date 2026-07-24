@@ -49,11 +49,31 @@ def _decode_annotation_string(verbatim_value: str, regular_value: str) -> str:
 
 
 def extract_step_patterns(java_source: str) -> list:
-    """Return the cucumber expressions declared in a Java glue file."""
+    """Return the cucumber expressions declared in a Java/C# glue file."""
     return [
         _decode_annotation_string(m.group(1), m.group(2))
         for m in _STEP_ANNOTATION_RE.finditer(java_source)
     ]
+
+
+# Cucumber-JS glue calls the bindings as bare functions — Given("...")/When(...)/
+# Then(...) — with no @ or [ prefix, and the pattern in a single- or double-quoted
+# JS string. The (?<![\w.$]) lookbehind avoids matching method calls like
+# `ctx.Given(`. Regex-literal patterns (/.../ ) are intentionally not extracted
+# here (the generated glue uses cucumber-expression strings).
+_JS_STEP_RE = re.compile(
+    r'(?<![\w.$])(?:Given|When|Then|And|But)\s*\(\s*'
+    r'(?:"((?:[^"\\]|\\.)*)"|\'((?:[^\'\\]|\\.)*)\')'
+)
+
+
+def extract_step_patterns_js(js_source: str) -> list:
+    """Return the cucumber expressions declared in a Cucumber-JS glue file."""
+    out = []
+    for m in _JS_STEP_RE.finditer(js_source):
+        raw = m.group(1) if m.group(1) is not None else m.group(2)
+        out.append(_unescape_java_string(raw or ""))
+    return out
 
 
 def cucumber_expression_to_regex(expr: str):

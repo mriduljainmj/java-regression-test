@@ -17,7 +17,7 @@ from pydantic import ValidationError
 
 from .ado import extract_work_item_id, fetch_work_item_context
 from .criticality import load_criticality, touched_controllers
-from .gherkin import extract_step_patterns, find_undefined_steps
+from .gherkin import extract_step_patterns, extract_step_patterns_js, find_undefined_steps
 from .prompts import (
     OUTPUT_FORMAT_INSTRUCTIONS,
     RETRY_SUFFIX_TEMPLATE,
@@ -26,14 +26,15 @@ from .prompts import (
     USER_PROMPT_TEMPLATE,
 )
 from . import dotnet_prompt
+from . import ui_prompt
 from .state import FeatureFile, GenerationResult, StepDefinitionFile, TestGenState
 
 logger = logging.getLogger(__name__)
 
 _FORCED_PROJECT_TYPE = os.environ.get("TESTGEN_FORCE_PROJECT_TYPE", "").strip().lower()
-if _FORCED_PROJECT_TYPE and _FORCED_PROJECT_TYPE not in {"java", "dotnet"}:
+if _FORCED_PROJECT_TYPE and _FORCED_PROJECT_TYPE not in {"java", "dotnet", "ui"}:
     logger.warning(
-        "Ignoring invalid TESTGEN_FORCE_PROJECT_TYPE=%r (expected 'java' or 'dotnet')",
+        "Ignoring invalid TESTGEN_FORCE_PROJECT_TYPE=%r (expected 'java', 'dotnet', or 'ui')",
         _FORCED_PROJECT_TYPE,
     )
     _FORCED_PROJECT_TYPE = ""
@@ -91,6 +92,14 @@ FEATURES_DIR_MARKER = "src/test/resources/features"
 CS_SOURCE_EXT = ".cs"
 FEATURES_DIR_MARKER_DOTNET = "dotnet-component/Tests/Features"
 DOTNET_TESTS_DIR_MARKER = "dotnet-component/Tests/"
+
+# Front-end UI support (Playwright + Cucumber-JS). Framework-agnostic: the tests
+# drive the rendered DOM, so React/Vue/Svelte/plain HTML all route here.
+UI_SOURCE_MARKER = os.environ.get("TESTGEN_UI_SOURCE_MARKER", "frontend-react/src")
+UI_TESTS_DIR_MARKER = os.environ.get("TESTGEN_UI_TESTS_DIR", "frontend-react/tests/")
+UI_FEATURES_DIR_MARKER = os.environ.get("TESTGEN_UI_FEATURES_DIR", "frontend-react/tests/features")
+UI_COMPONENT_DIR = os.environ.get("TESTGEN_UI_COMPONENT_DIR", "frontend-react")
+UI_SOURCE_EXTS = (".jsx", ".tsx", ".vue", ".svelte", ".js", ".ts")
 
 # GitHub sends this as `before` on the first push to a branch.
 _ZERO_SHA = re.compile(r"^0{7,40}$")
@@ -212,6 +221,13 @@ def collect_diff(state: TestGenState) -> TestGenState:
 
     java_changes = [f for f in changed_files if JAVA_SOURCE_MARKER in f and f.endswith(".java")]
     cs_changes = [f for f in changed_files if f.endswith(CS_SOURCE_EXT) or f.endswith(".csproj")]
+    # Front-end source changes (not the UI tests themselves).
+    ui_changes = [
+        f for f in changed_files
+        if f.startswith(UI_SOURCE_MARKER)
+        and f.endswith(UI_SOURCE_EXTS)
+        and UI_TESTS_DIR_MARKER not in f
+    ]
 
     if _FORCED_PROJECT_TYPE:
         project_type = _FORCED_PROJECT_TYPE
@@ -221,12 +237,15 @@ def collect_diff(state: TestGenState) -> TestGenState:
             project_type = "dotnet"
         elif java_changes:
             project_type = "java"
+        elif ui_changes:
+            project_type = "ui"
 
     logger.info(
-        "Change detection summary: total=%d, java=%d, dotnet=%d, selected=%s, forced=%s",
+        "Change detection summary: total=%d, java=%d, dotnet=%d, ui=%d, selected=%s, forced=%s",
         len(changed_files),
         len(java_changes),
         len(cs_changes),
+        len(ui_changes),
         project_type or "none",
         _FORCED_PROJECT_TYPE or "none",
     )
@@ -236,7 +255,7 @@ def collect_diff(state: TestGenState) -> TestGenState:
     update: TestGenState = {"git_diff": diff, "changed_files": changed_files, "resolved_base": base}
     if project_type is None:
         update["skipped_reason"] = (
-            "No Java or C# source changes between "
+            "No Java, C#, or front-end source changes between "
             f"{base} and {head}; nothing to generate tests for."
         )
         return update
@@ -381,6 +400,43 @@ def gather_context(state: TestGenState) -> TestGenState:
             if patterns:
                 step_patterns.extend(patterns)
                 sources.append(f"// FILE (step definitions): {rel}\n{text}")
+    elif project_type == "ui":
+        # Front-end source (changed files first), plus existing JS step definitions
+        # so the model can reuse step wording. Framework-agnostic — the source may
+        # be JSX, Vue, Svelte, or plain JS/TS.
+        changed_ui = [
+            rel for rel in changed_files
+            if rel.startswith(UI_SOURCE_MARKER) and rel.endswith(UI_SOURCE_EXTS)
+        ]
+        seen = set(changed_ui)
+        other_ui: list = []
+        for ext in UI_SOURCE_EXTS:
+            for p in _iter_repo_files(repo, f"*{ext}"):
+                rel = str(p.relative_to(repo))
+                if rel.startswith(UI_SOURCE_MARKER) and rel not in seen:
+                    seen.add(rel)
+                    other_ui.append(rel)
+        for rel in changed_ui + other_ui:
+            path = repo / rel
+            if path.is_file():
+                marker = "CHANGED IN THIS DIFF" if rel in changed_ui else "unchanged"
+                sources.append(
+                    f"// FILE ({marker}): {rel}\n"
+                    f"{_truncate_file_text(_read(path), DOTNET_MAX_FILE_CHARS)}"
+                )
+
+        for js in _iter_repo_files(repo, "*.steps.js"):
+            rel = str(js.relative_to(repo))
+            if not rel.startswith(UI_TESTS_DIR_MARKER):
+                continue
+            text = _read(js)
+            patterns = extract_step_patterns_js(text)
+            if patterns:
+                step_patterns.extend(patterns)
+            sources.append(
+                f"// FILE (step definitions): {rel}\n"
+                f"{_truncate_file_text(text, DOTNET_MAX_FILE_CHARS)}"
+            )
     else:
         selected_cs = _select_dotnet_context_files(repo, changed_files)
         changed_cs_set = {
@@ -418,6 +474,8 @@ def gather_context(state: TestGenState) -> TestGenState:
             continue
         if project_type == "java" and FEATURES_DIR_MARKER not in rel:
             continue
+        if project_type == "ui" and not rel.startswith(UI_FEATURES_DIR_MARKER):
+            continue
         features.append(f"# FILE: {rel}\n{_read(feature)}")
 
     feature_examples = "\n\n".join(features)
@@ -448,7 +506,11 @@ def gather_context(state: TestGenState) -> TestGenState:
 
 
 def _get_prompt_module(project_type: str):
-    return dotnet_prompt if project_type == "dotnet" else __import__("testgen.prompts", fromlist=["*"])
+    if project_type == "dotnet":
+        return dotnet_prompt
+    if project_type == "ui":
+        return ui_prompt
+    return __import__("testgen.prompts", fromlist=["*"])
 
 
 def _strip_markdown_fences(text: str) -> str:
@@ -827,6 +889,24 @@ def _deterministic_rename_generation(state: TestGenState):
     )
 
 
+def _glue_language(name: str, language: Optional[str]) -> str:
+    """Resolve a step-definition file's language from its hint or extension."""
+    if language:
+        return language
+    if name.endswith(".js") or name.endswith(".ts"):
+        return "javascript"
+    if name.endswith(".java"):
+        return "java"
+    return "csharp"
+
+
+def _glue_patterns(name: str, content: str, language: Optional[str] = None) -> list:
+    """Extract step patterns from glue with the right parser for its language."""
+    if _glue_language(name, language) == "javascript":
+        return extract_step_patterns_js(content)
+    return extract_step_patterns(content)
+
+
 def validate_output(state: TestGenState) -> TestGenState:
     """Validate generated Gherkin (structure, paths, CREATE/UPDATE consistency,
     and that every step matches an existing step definition)."""
@@ -899,13 +979,18 @@ def validate_output(state: TestGenState) -> TestGenState:
     for glue in generation.new_or_modified_step_definitions:
         name = glue.file_name.lstrip("./")
         target = (repo / name).resolve()
-        language = glue.language or ("java" if name.endswith(".java") else "csharp")
+        language = _glue_language(name, glue.language)
 
         if name in seen_names:
             errors.append(f"{name}: appears more than once in the output")
         seen_names.add(name)
 
-        if project_type == "dotnet" and language == "java":
+        if project_type == "ui":
+            if not name.endswith(".js"):
+                errors.append(f"{name}: UI step-definition file name must end with .js (Playwright/Cucumber-JS)")
+            if UI_TESTS_DIR_MARKER not in name:
+                errors.append(f"{name}: UI step definitions must live under {UI_TESTS_DIR_MARKER}")
+        elif project_type == "dotnet" and language == "java":
             errors.append(
                 f"{name}: .java step-definition files are invalid for dotnet projects. "
                 "Use a .cs file under dotnet-component/Tests/ instead."
@@ -923,7 +1008,7 @@ def validate_output(state: TestGenState) -> TestGenState:
         if not target.is_relative_to(repo):
             errors.append(f"{name}: path escapes the repository root")
 
-        patterns_in_file = extract_step_patterns(glue.content)
+        patterns_in_file = _glue_patterns(name, glue.content, glue.language)
         if not patterns_in_file:
             errors.append(
                 f"{name}: contains no [Given]/[When]/[Then] step definitions — "
@@ -961,7 +1046,7 @@ def validate_output(state: TestGenState) -> TestGenState:
                 )
         if target.is_file():
             removed = [
-                p for p in extract_step_patterns(_read(target))
+                p for p in _glue_patterns(name, _read(target), glue.language)
                 if p not in patterns_in_file
             ]
             if removed:
@@ -997,6 +1082,13 @@ def validate_output(state: TestGenState) -> TestGenState:
                     f"or any other project. Regenerate at "
                     f"dotnet-component/Tests/Features/{name.split('/')[-1]}"
                 )
+        elif project_type == "ui":
+            if not name.startswith(UI_FEATURES_DIR_MARKER):
+                errors.append(
+                    f"{name}: this is a UI run — feature files MUST be under "
+                    f"{UI_FEATURES_DIR_MARKER}/ (not under java-component/ or dotnet-component/). "
+                    f"Regenerate at {UI_FEATURES_DIR_MARKER}/{name.split('/')[-1]}"
+                )
         else:  # java
             if FEATURES_DIR_MARKER not in name:
                 errors.append(
@@ -1024,8 +1116,12 @@ def validate_output(state: TestGenState) -> TestGenState:
         # proposed in this generation — or Cucumber will fail the PR with
         # undefined steps. Feed exact offenders back.
         if all_patterns:
-            glue_loc = ("dotnet-component/Tests/StepDefinitions/" if project_type == "dotnet"
-                        else "java-component/src/test/java/.../cucumber/")
+            if project_type == "dotnet":
+                glue_loc = "dotnet-component/Tests/StepDefinitions/"
+            elif project_type == "ui":
+                glue_loc = f"{UI_TESTS_DIR_MARKER}steps/"
+            else:
+                glue_loc = "java-component/src/test/java/.../cucumber/"
             for step in find_undefined_steps(feature.gherkin_content, all_patterns):
                 message = (
                     f'{name}: step "{step}" matches no existing step definition. '
@@ -1055,7 +1151,7 @@ def validate_output(state: TestGenState) -> TestGenState:
     
     if feature_steps_used:
         for glue in generation.new_or_modified_step_definitions:
-            if not extract_step_patterns(glue.content):
+            if not _glue_patterns(glue.file_name.lstrip("./"), glue.content, glue.language):
                 errors.append(
                     f"❌ {glue.file_name}: Step definition file was created but is EMPTY.\n"
                     f"The corresponding feature file uses custom steps that are NOT in existing bindings.\n"
@@ -1201,9 +1297,11 @@ def run_generated_tests(state: TestGenState) -> TestGenState:
                 "test_report": "no files written; nothing to run"}
 
     project_type = state.get("project_type", "java")
-    
+
     if project_type == "java":
         return _run_java_tests(repo, state)
+    elif project_type == "ui":
+        return _run_ui_tests(repo, state)
     else:  # dotnet
         return _run_dotnet_tests(repo, state)
 
@@ -1303,6 +1401,86 @@ def _run_dotnet_tests(repo: Path, state: TestGenState) -> TestGenState:
         "validation_errors": [],
     }
 
+
+
+def _extract_ui_scenario_failures(repo: Path) -> list:
+    """Parse the Cucumber-JS JSON report for failed/undefined UI scenarios."""
+    report_path = repo / UI_COMPONENT_DIR / "reports" / "cucumber.json"
+    if not report_path.is_file():
+        return []
+    try:
+        report = json.loads(_read(report_path))
+    except (ValueError, OSError):
+        return []
+
+    failures = []
+    for feature in report:
+        background = []
+        for el in feature.get("elements", []):
+            steps = el.get("steps", [])
+            if el.get("type") == "background":
+                background = steps
+                continue
+            for step in background + steps:
+                res = step.get("result", {})
+                if res.get("status") in ("failed", "undefined", "pending", "ambiguous"):
+                    why = res.get("error_message", res.get("status", "")).splitlines()
+                    failures.append(
+                        f'- [{feature.get("name")}] "{el.get("name")}" → '
+                        f'step "{step.get("keyword", "").strip()} {step.get("name")}" '
+                        f'{res.get("status")}: {why[0] if why else ""}'
+                    )
+                    break
+    return failures[:25]
+
+
+def _run_ui_tests(repo: Path, state: TestGenState) -> TestGenState:
+    """Execute front-end UI tests via npm (Vite build + Cucumber-JS + Playwright)."""
+    ui_dir = repo / UI_COMPONENT_DIR
+    npm = shutil.which("npm")
+    if npm is None or not (ui_dir / "package.json").is_file():
+        logger.warning(
+            "npm not found or missing %s/package.json — skipping UI test execution",
+            UI_COMPONENT_DIR,
+        )
+        return {"tests_passed": True, "test_failures": [],
+                "test_report": "UI test execution skipped (npm or front-end package not available)"}
+
+    logger.info("Running UI tests: npm test in %s", ui_dir)
+    proc = subprocess.run(
+        [npm, "test"],
+        cwd=str(ui_dir), capture_output=True, text=True, timeout=TEST_TIMEOUT,
+    )
+
+    if proc.returncode == 0:
+        logger.info("UI tests passed.")
+        return {"tests_passed": True, "test_failures": [],
+                "test_report": "all UI tests passed"}
+
+    test_attempts = state.get("test_attempts", 0) + 1
+    output = proc.stdout + "\n" + proc.stderr
+    scenario_failures = _extract_ui_scenario_failures(repo)
+
+    feedback: list = []
+    if scenario_failures:
+        feedback.append("UI SCENARIO FAILURES:")
+        feedback += scenario_failures
+    if not feedback:
+        # Build/syntax error before Cucumber produced a report — feed back the tail.
+        tail = "\n".join(output.splitlines()[-30:])
+        feedback.append(
+            "`npm test` failed before producing a scenario report (build, ESM/syntax, "
+            "or selector error). Tail of the output:\n" + tail
+        )
+
+    logger.warning("UI test attempt %d failed (%d scenario failure(s))", test_attempts, len(scenario_failures))
+    return {
+        "tests_passed": False,
+        "test_attempts": test_attempts,
+        "test_failures": feedback,
+        "test_report": f"{len(scenario_failures)} UI scenario failure(s) on attempt {test_attempts}",
+        "validation_errors": [],
+    }
 
 
 def create_pull_request(state: TestGenState) -> TestGenState:

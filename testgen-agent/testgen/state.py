@@ -32,9 +32,9 @@ class StepDefinitionFile(BaseModel):
         description="Full source of the step-definition file (C# or Java)",
         alias="java_content",
     )
-    language: Optional[Literal["java", "csharp"] ] = Field(
+    language: Optional[Literal["java", "csharp", "javascript"] ] = Field(
         default=None,
-        description="Optional language hint: 'java' or 'csharp'. If omitted, inferred from file extension."
+        description="Optional language hint: 'java', 'csharp', or 'javascript' (Playwright/Cucumber-JS UI glue). If omitted, inferred from file extension."
     )
 
     model_config = {
@@ -69,7 +69,7 @@ class TestGenState(TypedDict, total=False):
     ado_work_item_context: str
     reviewer_guidance: str  # free-text edge-case hints from a human, injected into the prompt
     resolved_base: str
-    project_type: str  # "java" | "dotnet" — detected in collect_diff, must persist end-to-end
+    project_type: str  # "java" | "dotnet" | "ui" — detected in collect_diff, must persist end-to-end
 
     # Gathered context
     git_diff: str

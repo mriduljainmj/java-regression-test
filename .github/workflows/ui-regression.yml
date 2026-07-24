@@ -1,0 +1,45 @@
+name: UI Regression (Playwright)
+
+# Runs the front-end UI regression suite (Cucumber + Playwright) whenever the
+# React app or its tests change — the browser-enabled counterpart to the backend
+# regression workflow. This is the "run the generated tests" half of the agent's
+# UI mode: the agent writes frontend-react/tests/**, this executes them.
+
+on:
+  push:
+    paths:
+      - 'frontend-react/**'
+  pull_request:
+    paths:
+      - 'frontend-react/**'
+  workflow_dispatch:
+
+jobs:
+  ui-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-react
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run UI regression suite
+        run: npm test
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-report
+          path: frontend-react/reports/
+          if-no-files-found: ignore
