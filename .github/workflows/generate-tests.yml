@@ -4,7 +4,7 @@ name: Generate regression tests
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, ui-feature]
     paths:
       - "java-component/src/main/**"
       - "dotnet-component/**"
@@ -58,7 +58,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: "9.0.x"
 
       # For UI changes the agent runs `npm test` (Playwright + Cucumber) on what it
       # generates and self-corrects from the failures, so the job needs Node too.
