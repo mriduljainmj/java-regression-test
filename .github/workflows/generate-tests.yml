@@ -10,6 +10,11 @@ on:
       - "dotnet-component/**"
       - "**/*.cs"
       - "**/*.csproj"
+      - "frontend-react/src/**"
+      - "**/*.jsx"
+      - "**/*.tsx"
+      - "**/*.vue"
+      - "**/*.svelte"
   workflow_dispatch:
     inputs:
       base:
@@ -55,6 +60,12 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
+      # For UI changes the agent runs `npm test` (Playwright + Cucumber) on what it
+      # generates and self-corrects from the failures, so the job needs Node too.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Install agent dependencies
         run: pip install -r testgen-agent/requirements.txt
 
@@ -83,6 +94,11 @@ jobs:
           elif echo "$CHANGED_FILES" | grep -E 'src/main/java/.*\.java$' >/dev/null 2>&1; then
             export TESTGEN_FORCE_PROJECT_TYPE=java
             echo "Routing override: TESTGEN_FORCE_PROJECT_TYPE=java"
+          elif echo "$CHANGED_FILES" | grep -E '^frontend-react/src/.*\.(jsx|tsx|js|ts|vue|svelte)$' >/dev/null 2>&1; then
+            export TESTGEN_FORCE_PROJECT_TYPE=ui
+            echo "Routing override: TESTGEN_FORCE_PROJECT_TYPE=ui"
+            # Prepare the UI runner so the agent's `npm test` self-correction works.
+            ( cd frontend-react && npm install && npx playwright install --with-deps chromium )
           else
             echo "No routing override inferred from HEAD changed files"
           fi

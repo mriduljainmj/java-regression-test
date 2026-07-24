@@ -17,6 +17,12 @@ Feature: Product catalog management (React)
     Then I see the validation error "name must not be blank"
     And the catalog shows 3 products
 
+  # Generated for the new name-length rule added to ProductCatalog.jsx.
+  Scenario: Reject a product name that is too short
+    When I add a product named "ab" priced "19.99"
+    Then I see the validation error "name must be at least 5 characters"
+    And the catalog shows 3 products
+
   Scenario: Reject a non-positive price
     When I add a product named "Free Sample" priced "0"
     Then I see the validation error "price must be greater than zero"
