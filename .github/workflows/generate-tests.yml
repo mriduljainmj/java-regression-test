@@ -98,7 +98,9 @@ jobs:
             export TESTGEN_FORCE_PROJECT_TYPE=ui
             echo "Routing override: TESTGEN_FORCE_PROJECT_TYPE=ui"
             # Prepare the UI runner so the agent's `npm test` self-correction works.
-            ( cd frontend-react && npm install && npx playwright install --with-deps chromium )
+            # NOTE: this step runs with working-directory: testgen-agent, so use the
+            # absolute workspace path — frontend-react is at the repo root.
+            ( cd "$GITHUB_WORKSPACE/frontend-react" && npm install && npx playwright install --with-deps chromium )
           else
             echo "No routing override inferred from HEAD changed files"
           fi
