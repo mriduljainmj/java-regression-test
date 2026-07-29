@@ -1,5 +1,16 @@
 # Step 1 of the flow: when component code changes land on main, diff the change,
 # generate/update Cucumber regression tests, and open a PR for manual review.
+#
+# Base-ref tracking: a plain `github.event.before` base means a run that fails
+# (model exhausted, validation exhausted, unexpected error — main.py exits non-zero)
+# permanently loses that push's diff the moment the NEXT push happens, because
+# `before` always advances to the prior push's HEAD regardless of whether this
+# workflow actually succeeded on it. To fix that, we track the last commit this
+# workflow successfully processed (skipped intentionally, or reached a PR — even a
+# PR flagged as failing tests counts, since the diff WAS incorporated) with a git
+# tag per branch (`testgen-verified/<branch>`), and only move that tag forward when
+# the run succeeds. A failed run leaves the tag where it was, so the next push's
+# diff naturally grows to include the unresolved change instead of dropping it.
 name: Generate regression tests
 
 on:
@@ -66,6 +77,25 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Resolve base ref (prefer the last successfully-processed commit)
+        id: resolve_base
+        run: |
+          SAFE_BRANCH="$(echo "${{ github.ref_name }}" | tr '/' '-')"
+          TAG="testgen-verified/${SAFE_BRANCH}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          MANUAL_BASE="${{ github.event.inputs.base }}"
+          if [ -n "$MANUAL_BASE" ]; then
+            echo "base=$MANUAL_BASE" >> "$GITHUB_OUTPUT"
+            echo "Using manually specified base: $MANUAL_BASE"
+          elif git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "base=$TAG" >> "$GITHUB_OUTPUT"
+            echo "Using last successfully-processed commit ($TAG -> $(git rev-parse "$TAG")) as base"
+          else
+            echo "base=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+            echo "No prior success tag ($TAG) found; falling back to github.event.before"
+          fi
+
       - name: Install agent dependencies
         run: pip install -r testgen-agent/requirements.txt
 
@@ -109,5 +139,15 @@ jobs:
           git config user.email "testgen-agent@users.noreply.github.com"
           python main.py \
             --repo "$GITHUB_WORKSPACE" \
-            --base "${{ github.event.inputs.base || github.event.before }}" \
+            --base "${{ steps.resolve_base.outputs.base }}" \
             --head "${{ github.sha }}"
+
+      # Only runs if the step above succeeded (main.py exit 0) — a failed run leaves
+      # the tag where it was, so the next push's diff still includes this change.
+      - name: Mark this commit as successfully processed
+        if: success()
+        run: |
+          TAG="${{ steps.resolve_base.outputs.tag }}"
+          git tag -f "$TAG" "${{ github.sha }}"
+          git push origin "refs/tags/$TAG" --force
+          echo "Moved $TAG -> ${{ github.sha }}"

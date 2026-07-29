@@ -23,7 +23,7 @@ function validateProduct(name, priceRaw) {
   const price = Number(priceRaw);
   if (!Number.isFinite(price)) return "price is required";
   if (price <= 0) return "price must be greater than zero";
-  if (price > PRICE_CAP) return "price must not exceed 300000.00";
+  if (price > PRICE_CAP) return "price must not exceed 400000.00";
   return null;
 }
 
