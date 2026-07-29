@@ -18,6 +18,10 @@ setDefaultTimeout(30000);
 const PORT = process.env.PORT || 4173;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const SHOTS_DIR = path.join(__dirname, "..", "..", "reports", "screenshots");
+// HEADLESS=false (or 0) opens a real visible browser window so you can watch
+// the run. SLOWMO (ms) optionally slows each Playwright action for readability.
+const HEADLESS = !["false", "0"].includes((process.env.HEADLESS || "").toLowerCase());
+const SLOW_MO = Number(process.env.SLOWMO || 0);
 
 const slug = (s) => (s || "scenario").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
 
@@ -53,8 +57,8 @@ BeforeAll(async function () {
     });
     await waitForServer(`${BASE_URL}/`);
   }
-  browser = await chromium.launch();
-  log.info(`browser launched; serving ${BASE_URL}`);
+  browser = await chromium.launch({ headless: HEADLESS, slowMo: SLOW_MO });
+  log.info(`browser launched (headless=${HEADLESS}${SLOW_MO ? `, slowMo=${SLOW_MO}ms` : ""}); serving ${BASE_URL}`);
 });
 
 AfterAll(async function () {

@@ -16,7 +16,7 @@ const money = (n) => "$" + n.toFixed(2);
 
 function validateProduct(name, priceRaw) {
   const trimmed = (name || "").trim();
-  if (trimmed === "") return "name must not be blank";
+  if (trimmed === "") return "name is required";
   if (trimmed.length > NAME_MAX) return "name must not exceed 100 characters";
   if (trimmed.length < 2) return "name must be at least 2 characters";
   if ((priceRaw || "").trim() === "") return "price is required";

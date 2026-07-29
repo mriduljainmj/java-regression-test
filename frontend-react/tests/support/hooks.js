@@ -14,6 +14,10 @@ const PKG_ROOT = join(HERE, "..", ".."); // frontend-react/
 const SHOTS_DIR = join(PKG_ROOT, "reports", "screenshots");
 const PORT = process.env.PORT || 4174;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+// HEADLESS=false (or 0) opens a real visible browser window so you can watch
+// the run. SLOWMO (ms) optionally slows each Playwright action for readability.
+const HEADLESS = !["false", "0"].includes((process.env.HEADLESS || "").toLowerCase());
+const SLOW_MO = Number(process.env.SLOWMO || 0);
 
 let browser;
 let server; // static server for dist/ we start ourselves (unless BASE_URL is provided)
@@ -46,8 +50,8 @@ BeforeAll(async function () {
     });
     await waitForServer(`${BASE_URL}/`);
   }
-  browser = await chromium.launch();
-  log.info(`browser launched; serving ${BASE_URL}`);
+  browser = await chromium.launch({ headless: HEADLESS, slowMo: SLOW_MO });
+  log.info(`browser launched (headless=${HEADLESS}${SLOW_MO ? `, slowMo=${SLOW_MO}ms` : ""}); serving ${BASE_URL}`);
 });
 
 AfterAll(async function () {

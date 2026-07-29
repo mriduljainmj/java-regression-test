@@ -112,6 +112,30 @@ class UiValidationTest(unittest.TestCase):
         ))
         self.assertTrue(any("must end with .js" in e for e in out["validation_errors"]))
 
+    def test_empty_generation_for_changed_ui_source_is_rejected(self):
+        """Parity with the .NET guard: a UI source change that produces NO feature
+        and NO step-definition update must be forced to retry, not silently accepted."""
+        empty = GenerationResult(
+            impacted_endpoints=[], analysis_summary="nothing observable",
+            new_or_modified_features=[], new_or_modified_step_definitions=[],
+        )
+        state = _ui_state(self.repo, empty)
+        state["changed_files"] = ["frontend-react/src/ProductCatalog.jsx"]
+        out = validate_output(state)
+        self.assertTrue(any("CRITICAL VALIDATION FAILURE" in e for e in out["validation_errors"]))
+
+    def test_empty_generation_without_ui_source_change_is_allowed(self):
+        """No UI source in changed_files (e.g. only a test file touched) — the
+        empty-generation guard must not fire."""
+        empty = GenerationResult(
+            impacted_endpoints=[], analysis_summary="nothing to do",
+            new_or_modified_features=[], new_or_modified_step_definitions=[],
+        )
+        state = _ui_state(self.repo, empty)
+        state["changed_files"] = ["README.md"]
+        out = validate_output(state)
+        self.assertEqual(out["validation_errors"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

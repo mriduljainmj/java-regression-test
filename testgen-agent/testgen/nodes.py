@@ -963,7 +963,35 @@ def validate_output(state: TestGenState) -> TestGenState:
                     "RETRY: Call the LLM again with a stronger mandate."
                 ]
             }
-    
+
+    # CRITICAL CHECK: If front-end source changed but NO features generated, that's
+    # an ERROR — parity with the .NET guard above. Without this, a model that wrongly
+    # decides a UI change (or a whole new page) is "not observable" is never forced
+    # to retry, unlike the other two project types.
+    if project_type == "ui":
+        ui_files_changed = any(
+            f.startswith(UI_SOURCE_MARKER) and f.endswith(UI_SOURCE_EXTS) and UI_TESTS_DIR_MARKER not in f
+            for f in state.get("changed_files", [])
+        )
+        produced_nothing = generation is None or (
+            not generation.new_or_modified_features
+            and not generation.new_or_modified_step_definitions
+        )
+        if ui_files_changed and produced_nothing:
+            return {
+                "validation_errors": [
+                    "❌ CRITICAL VALIDATION FAILURE:\n"
+                    f"Front-end source changed under {UI_SOURCE_MARKER}/, but ZERO feature "
+                    "files AND ZERO step-definition updates were generated.\n"
+                    "A new/changed on-screen message, field, validation rule, or page is "
+                    "observable and REQUIRES a Cucumber feature file. Only a change with "
+                    "genuinely no visible/textual effect (pure internal refactor, styling-only "
+                    "change with no rendered difference) may produce nothing — if that is truly "
+                    "the case here, state so explicitly in ANALYSIS instead of returning empty.\n"
+                    "RETRY: Call the LLM again with a stronger mandate."
+                ]
+            }
+
     if generation is None:
         # generate_tests already recorded parse errors; pass them through.
         return {}
