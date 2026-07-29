@@ -1,20 +1,28 @@
 # Step 2 of the flow: after the (manually reviewed) test PR merges, run the
 # regression suite for the component that changed — Java (mvn verify) and/or
 # .NET (dotnet test). A paths filter runs only the suite(s) actually affected.
+#
+# Portability: like generate-tests.yml, everything INSIDE the job is driven by
+# repository variables (TESTGEN_COMPONENT_DIR, TESTGEN_DOTNET_COMPONENT_DIR,
+# TESTGEN_DOTNET_TEST_PROJECT — Settings → Actions → Variables), defaulting to
+# this demo repo's layout. Only the top-level `paths:` trigger below can't be
+# dynamic (GitHub evaluates it before vars are available) — edit the
+# dotnet-component/** entry when copying this into a repo with a different
+# .NET folder name; the extension-based entries already work regardless.
 name: Cucumber regression
 
 on:
   push:
     branches: [main, develop]
     paths:
-      - "java-component/**"
+      - "**/*.java"
       - "dotnet-component/**"
       - "**/*.cs"
       - "**/*.csproj"
   pull_request:
     branches: [main, develop]
     paths:
-      - "java-component/**"
+      - "**/*.java"
       - "dotnet-component/**"
       - "**/*.cs"
       - "**/*.csproj"
@@ -35,9 +43,9 @@ jobs:
         with:
           filters: |
             java:
-              - 'java-component/**'
+              - '**/*.java'
             dotnet:
-              - 'dotnet-component/**'
+              - '${{ vars.TESTGEN_DOTNET_COMPONENT_DIR || 'dotnet-component' }}/**'
               - '**/*.cs'
               - '**/*.csproj'
 
@@ -75,9 +83,11 @@ jobs:
         id: java_tests
         if: steps.changes.outputs.java == 'true' && steps.gate.outputs.skip != 'true'
         continue-on-error: true
+        env:
+          TESTGEN_COMPONENT_DIR: ${{ vars.TESTGEN_COMPONENT_DIR || 'java-component' }}
         run: |
           set +e
-          mvn -f java-component/pom.xml --batch-mode verify
+          mvn -f "$TESTGEN_COMPONENT_DIR/pom.xml" --batch-mode verify
           TEST_RESULT=$?
           set -e
           if [ $TEST_RESULT -ne 0 ]; then
@@ -97,12 +107,14 @@ jobs:
         if: steps.changes.outputs.dotnet == 'true' && steps.gate.outputs.skip != 'true' && !(steps.java_tests.outputs.failed == 'true' && steps.gate.outputs.high == 'true')
         continue-on-error: true
         # Stop running additional test-suite steps if Java already failed with HIGH severity.
-        working-directory: dotnet-component
+        working-directory: ${{ vars.TESTGEN_DOTNET_COMPONENT_DIR || 'dotnet-component' }}
+        env:
+          TESTGEN_DOTNET_TEST_PROJECT: ${{ vars.TESTGEN_DOTNET_TEST_PROJECT || 'BP.Tests.csproj' }}
         run: |
           echo "Cleaning stale build artifacts to avoid nested output-path pollution..."
           rm -rf bin obj bin-tests obj-tests TestResults
 
-          dotnet test BP.Tests.csproj --nologo --verbosity minimal \
+          dotnet test "$TESTGEN_DOTNET_TEST_PROJECT" --nologo --verbosity minimal \
             --results-directory TestResults --logger "trx;LogFileName=dotnet-tests.trx"
           TEST_RESULT=$?
 
@@ -110,12 +122,13 @@ jobs:
           export PATH="$PATH:$HOME/.dotnet/tools"
           dotnet tool update --global SpecFlow.Plus.LivingDoc.CLI --version 3.* || true
 
-          TEST_DLL="$(find bin-tests -type f -name 'BP.Tests.dll' | head -n 1 || true)"
+          TEST_DLL_NAME="$(basename "$TESTGEN_DOTNET_TEST_PROJECT" .csproj).dll"
+          TEST_DLL="$(find bin-tests -type f -name "$TEST_DLL_NAME" | head -n 1 || true)"
           if [ -n "$TEST_DLL" ] && [ -f "TestResults/dotnet-tests.trx" ]; then
             "$HOME/.dotnet/tools/livingdoc" test-assembly "$TEST_DLL" \
               -t TestResults/dotnet-tests.trx -o TestResults/dotnet-livingdoc.html || true
           else
-            echo "::warning::Could not find BP.Tests.dll or dotnet-tests.trx for LivingDoc generation"
+            echo "::warning::Could not find $TEST_DLL_NAME or dotnet-tests.trx for LivingDoc generation"
           fi
 
           # If LivingDoc is missing, generate a generic HTML test report from TRX.
@@ -145,7 +158,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cucumber-report-java
-          path: java-component/target/cucumber-report.*
+          path: ${{ vars.TESTGEN_COMPONENT_DIR || 'java-component' }}/target/cucumber-report.*
           if-no-files-found: warn
 
       - name: Upload .NET test results (TRX)
@@ -162,8 +175,8 @@ jobs:
         with:
           name: cucumber-report-dotnet
           path: |
-            dotnet-component/TestResults/dotnet-livingdoc.html
-            dotnet-component/TestResults/trx-html/**
+            ${{ vars.TESTGEN_DOTNET_COMPONENT_DIR || 'dotnet-component' }}/TestResults/dotnet-livingdoc.html
+            ${{ vars.TESTGEN_DOTNET_COMPONENT_DIR || 'dotnet-component' }}/TestResults/trx-html/**
           if-no-files-found: warn
 
       # When the suite fails on a protected branch, log a subtask under the ticket
@@ -181,9 +194,9 @@ jobs:
           # it uses the parent ticket's assignee, then the commit author.
           ADO_ASSIGNEE: ${{ secrets.ADO_ASSIGNEE }}
           FAILING_COMPONENT: >-
-            ${{ (steps.changes.outputs.java == 'true' && steps.changes.outputs.dotnet == 'true') && 'java-component and dotnet-component'
-             || (steps.changes.outputs.java == 'true' && 'java-component')
-             || 'dotnet-component' }}
+            ${{ (steps.changes.outputs.java == 'true' && steps.changes.outputs.dotnet == 'true') && format('{0} and {1}', vars.TESTGEN_COMPONENT_DIR || 'java-component', vars.TESTGEN_DOTNET_COMPONENT_DIR || 'dotnet-component')
+             || (steps.changes.outputs.java == 'true' && (vars.TESTGEN_COMPONENT_DIR || 'java-component'))
+             || (vars.TESTGEN_DOTNET_COMPONENT_DIR || 'dotnet-component') }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_RUN_ID: ${{ github.run_id }}

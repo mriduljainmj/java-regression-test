@@ -1,14 +1,18 @@
 name: Auto-Update PROJECT.md
 
+# Portability: update-project-mindmap.py itself does a repo-wide scan (no hardcoded
+# folder names), so nothing there needs to change when copied into a real repo.
+# Only the `paths:` trigger below is folder-name-agnostic already via extension
+# wildcards — no editing needed even if the real repo uses different folder names.
 on:
   push:
     branches:
       - develop
       - main
     paths:
-      - 'java-component/src/main/**/*.java'
-      - 'dotnet-component/**/*.cs'
-      - 'dotnet-component/**/*.csproj'
+      - '**/*.java'
+      - '**/*.cs'
+      - '**/*.csproj'
       - '**/*.feature'
       - '!PROJECT.md'
 

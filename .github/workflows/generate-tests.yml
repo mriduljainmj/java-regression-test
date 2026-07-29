@@ -1,23 +1,46 @@
 # Step 1 of the flow: when component code changes land on main, diff the change,
 # generate/update Cucumber regression tests, and open a PR for manual review.
 #
-# Base-ref tracking: a plain `github.event.before` base means a run that fails
-# (model exhausted, validation exhausted, unexpected error — main.py exits non-zero)
-# permanently loses that push's diff the moment the NEXT push happens, because
-# `before` always advances to the prior push's HEAD regardless of whether this
-# workflow actually succeeded on it. To fix that, we track the last commit this
-# workflow successfully processed (skipped intentionally, or reached a PR — even a
-# PR flagged as failing tests counts, since the diff WAS incorporated) with a git
-# tag per branch (`testgen-verified/<branch>`), and only move that tag forward when
-# the run succeeds. A failed run leaves the tag where it was, so the next push's
-# diff naturally grows to include the unresolved change instead of dropping it.
+# Two problems this workflow solves beyond the obvious:
+#
+# 1. Base-ref tracking (diff loss on failure): a plain `github.event.before` base
+#    means a run that fails (model exhausted, validation exhausted, unexpected
+#    error — main.py exits non-zero) permanently loses that push's diff the moment
+#    the NEXT push happens, because `before` always advances regardless of whether
+#    this workflow actually succeeded. Fixed by tracking the last commit each
+#    project type was successfully processed through with a git tag
+#    (`testgen-verified/<branch>-<type>`), only moving it forward on success. A
+#    failed run leaves its tag where it was, so the next push's diff for that type
+#    naturally grows to include the unresolved change instead of dropping it.
+#
+# 2. Mixed commits (one type silently wins): a single push can touch more than one
+#    project type at once (e.g. a backend change alongside a UI change). Picking
+#    only one type per run (highest-priority match) means the other type's change
+#    in that same commit is never sent to the model — and since the run still
+#    "succeeds" for the type it did pick, that type's tag advances too, silently
+#    marking the other type's change as resolved when no tests were ever generated
+#    for it. Fixed by processing EVERY type present in the diff each run (one
+#    `main.py` invocation, one PR, and one tag per type), independently — so one
+#    type failing never blocks another type's diff from advancing.
+#
+# Portability: this workflow is meant to be copied into a real .NET, Java, or UI
+# repo, not just run against this demo's fixture apps. Everything INSIDE the job
+# (which folder is Java/.NET/UI, the .NET test project's filename) is driven by
+# repository variables (Settings → Actions → Variables), defaulting to this demo
+# repo's own layout — see the TESTGEN_* vars in the "Generate Cucumber tests" step.
+# The ONE thing that can't be made dynamic is the `paths:`/`branches:` trigger
+# below — GitHub evaluates triggers before a workflow run exists, so they can't
+# reference `vars.*`. When copying this workflow, edit `branches:` and the
+# folder-scoped path entries (dotnet-component/**, frontend-react/src/**) to match
+# the target repo; the extension-based entries (**/*.java, **/*.cs, **/*.jsx, …)
+# already work regardless of folder name.
 name: Generate regression tests
 
 on:
   push:
     branches: [main, develop, ui-feature]
     paths:
-      - "java-component/src/main/**"
+      - "**/*.java"
       - "dotnet-component/**"
       - "**/*.cs"
       - "**/*.csproj"
@@ -77,35 +100,19 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Resolve base ref (prefer the last successfully-processed commit)
-        id: resolve_base
-        run: |
-          SAFE_BRANCH="$(echo "${{ github.ref_name }}" | tr '/' '-')"
-          TAG="testgen-verified/${SAFE_BRANCH}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
-          MANUAL_BASE="${{ github.event.inputs.base }}"
-          if [ -n "$MANUAL_BASE" ]; then
-            echo "base=$MANUAL_BASE" >> "$GITHUB_OUTPUT"
-            echo "Using manually specified base: $MANUAL_BASE"
-          elif git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "base=$TAG" >> "$GITHUB_OUTPUT"
-            echo "Using last successfully-processed commit ($TAG -> $(git rev-parse "$TAG")) as base"
-          else
-            echo "base=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
-            echo "No prior success tag ($TAG) found; falling back to github.event.before"
-          fi
-
       - name: Install agent dependencies
         run: pip install -r testgen-agent/requirements.txt
 
       - name: Clean .NET build artifacts
+        env:
+          TESTGEN_DOTNET_COMPONENT_DIR: ${{ vars.TESTGEN_DOTNET_COMPONENT_DIR || 'dotnet-component' }}
         run: |
-          if [ -d dotnet-component ]; then
-            rm -rf dotnet-component/bin dotnet-component/obj dotnet-component/bin-tests dotnet-component/obj-tests dotnet-component/TestResults
+          D="$TESTGEN_DOTNET_COMPONENT_DIR"
+          if [ -d "$D" ]; then
+            rm -rf "$D/bin" "$D/obj" "$D/bin-tests" "$D/obj-tests" "$D/TestResults"
           fi
 
-      - name: Generate Cucumber tests and open PR
+      - name: Generate Cucumber tests and open PRs (one run per detected project type)
         working-directory: testgen-agent
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -116,38 +123,88 @@ jobs:
           AZDO_WORK_ITEM_ID: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ado_work_item_id || '' }}
           TESTGEN_MODEL_RETRIES: "3"
           TESTGEN_BACKOFF_SECONDS: "20,45,90"
+          MANUAL_BASE: ${{ github.event.inputs.base }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          SAFE_BRANCH_RAW: ${{ github.ref_name }}
+          # Same names the agent itself reads (testgen/nodes.py) — setting these as
+          # repo Variables when copying this workflow into a real repo is enough;
+          # no code or script edits needed. Defaults match this demo repo's layout.
+          TESTGEN_COMPONENT_DIR: ${{ vars.TESTGEN_COMPONENT_DIR || 'java-component' }}
+          TESTGEN_DOTNET_COMPONENT_DIR: ${{ vars.TESTGEN_DOTNET_COMPONENT_DIR || 'dotnet-component' }}
+          TESTGEN_DOTNET_TEST_PROJECT: ${{ vars.TESTGEN_DOTNET_TEST_PROJECT || 'BP.Tests.csproj' }}
+          TESTGEN_UI_COMPONENT_DIR: ${{ vars.TESTGEN_UI_COMPONENT_DIR || 'frontend-react' }}
         run: |
-          CHANGED_FILES="$(git show --name-only --pretty="" "${GITHUB_SHA}")"
-          if echo "$CHANGED_FILES" | grep -E '\.cs$|\.csproj$' >/dev/null 2>&1; then
-            export TESTGEN_FORCE_PROJECT_TYPE=dotnet
-            echo "Routing override: TESTGEN_FORCE_PROJECT_TYPE=dotnet"
-          elif echo "$CHANGED_FILES" | grep -E 'src/main/java/.*\.java$' >/dev/null 2>&1; then
-            export TESTGEN_FORCE_PROJECT_TYPE=java
-            echo "Routing override: TESTGEN_FORCE_PROJECT_TYPE=java"
-          elif echo "$CHANGED_FILES" | grep -E '^frontend-react/src/.*\.(jsx|tsx|js|ts|vue|svelte)$' >/dev/null 2>&1; then
-            export TESTGEN_FORCE_PROJECT_TYPE=ui
-            echo "Routing override: TESTGEN_FORCE_PROJECT_TYPE=ui"
-            # Prepare the UI runner so the agent's `npm test` self-correction works.
-            # NOTE: this step runs with working-directory: testgen-agent, so use the
-            # absolute workspace path — frontend-react is at the repo root.
-            ( cd "$GITHUB_WORKSPACE/frontend-react" && npm install && npx playwright install --with-deps chromium )
-          else
-            echo "No routing override inferred from HEAD changed files"
-          fi
-
           git config user.name "testgen-agent"
           git config user.email "testgen-agent@users.noreply.github.com"
-          python main.py \
-            --repo "$GITHUB_WORKSPACE" \
-            --base "${{ steps.resolve_base.outputs.base }}" \
-            --head "${{ github.sha }}"
 
-      # Only runs if the step above succeeded (main.py exit 0) — a failed run leaves
-      # the tag where it was, so the next push's diff still includes this change.
-      - name: Mark this commit as successfully processed
-        if: success()
-        run: |
-          TAG="${{ steps.resolve_base.outputs.tag }}"
-          git tag -f "$TAG" "${{ github.sha }}"
-          git push origin "refs/tags/$TAG" --force
-          echo "Moved $TAG -> ${{ github.sha }}"
+          SAFE_BRANCH="$(echo "$SAFE_BRANCH_RAW" | tr '/' '-')"
+          OVERALL_FAILED=0
+
+          # ---- .NET ----
+          TAG="testgen-verified/${SAFE_BRANCH}-dotnet"
+          if [ -n "$MANUAL_BASE" ]; then BASE="$MANUAL_BASE"
+          elif git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then BASE="$TAG"
+          else BASE="$EVENT_BEFORE"; fi
+          CHANGED="$(git diff --name-only "$BASE" "$HEAD_SHA" 2>/dev/null || true)"
+          if echo "$CHANGED" | grep -E "^${TESTGEN_DOTNET_COMPONENT_DIR}/.*\.(cs|csproj)\$" >/dev/null 2>&1; then
+            echo "── [dotnet] base=$BASE (tag=$TAG) ──"
+            if TESTGEN_FORCE_PROJECT_TYPE=dotnet python main.py --repo "$GITHUB_WORKSPACE" --base "$BASE" --head "$HEAD_SHA"; then
+              git tag -f "$TAG" "$HEAD_SHA" && git push origin "refs/tags/$TAG" --force \
+                || echo "[dotnet] WARNING: succeeded but failed to push tag $TAG — a future run may reprocess this diff"
+              echo "[dotnet] succeeded"
+            else
+              echo "[dotnet] FAILED — leaving $TAG in place so a future push retries this diff"
+              OVERALL_FAILED=1
+            fi
+          else
+            echo "── [dotnet] no relevant changes in $BASE..$HEAD_SHA — skipping ──"
+          fi
+
+          # ---- Java ----
+          TAG="testgen-verified/${SAFE_BRANCH}-java"
+          if [ -n "$MANUAL_BASE" ]; then BASE="$MANUAL_BASE"
+          elif git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then BASE="$TAG"
+          else BASE="$EVENT_BEFORE"; fi
+          CHANGED="$(git diff --name-only "$BASE" "$HEAD_SHA" 2>/dev/null || true)"
+          if echo "$CHANGED" | grep -E "^${TESTGEN_COMPONENT_DIR}/src/main/java/.*\.java\$" >/dev/null 2>&1; then
+            echo "── [java] base=$BASE (tag=$TAG) ──"
+            if TESTGEN_FORCE_PROJECT_TYPE=java python main.py --repo "$GITHUB_WORKSPACE" --base "$BASE" --head "$HEAD_SHA"; then
+              git tag -f "$TAG" "$HEAD_SHA" && git push origin "refs/tags/$TAG" --force \
+                || echo "[java] WARNING: succeeded but failed to push tag $TAG — a future run may reprocess this diff"
+              echo "[java] succeeded"
+            else
+              echo "[java] FAILED — leaving $TAG in place so a future push retries this diff"
+              OVERALL_FAILED=1
+            fi
+          else
+            echo "── [java] no relevant changes in $BASE..$HEAD_SHA — skipping ──"
+          fi
+
+          # ---- UI ----
+          TAG="testgen-verified/${SAFE_BRANCH}-ui"
+          if [ -n "$MANUAL_BASE" ]; then BASE="$MANUAL_BASE"
+          elif git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1; then BASE="$TAG"
+          else BASE="$EVENT_BEFORE"; fi
+          CHANGED="$(git diff --name-only "$BASE" "$HEAD_SHA" 2>/dev/null || true)"
+          if echo "$CHANGED" | grep -E "^${TESTGEN_UI_COMPONENT_DIR}/src/.*\.(jsx|tsx|js|ts|vue|svelte)\$" >/dev/null 2>&1; then
+            echo "── [ui] base=$BASE (tag=$TAG) ──"
+            # NOTE: this step runs with working-directory: testgen-agent, so use the
+            # absolute workspace path — the UI app is at the repo root.
+            ( cd "$GITHUB_WORKSPACE/$TESTGEN_UI_COMPONENT_DIR" && npm install && npx playwright install --with-deps chromium )
+            if TESTGEN_FORCE_PROJECT_TYPE=ui python main.py --repo "$GITHUB_WORKSPACE" --base "$BASE" --head "$HEAD_SHA"; then
+              git tag -f "$TAG" "$HEAD_SHA" && git push origin "refs/tags/$TAG" --force \
+                || echo "[ui] WARNING: succeeded but failed to push tag $TAG — a future run may reprocess this diff"
+              echo "[ui] succeeded"
+            else
+              echo "[ui] FAILED — leaving $TAG in place so a future push retries this diff"
+              OVERALL_FAILED=1
+            fi
+          else
+            echo "── [ui] no relevant changes in $BASE..$HEAD_SHA — skipping ──"
+          fi
+
+          if [ "$OVERALL_FAILED" -eq 1 ]; then
+            echo "One or more project types failed generation this run — see logs above."
+            exit 1
+          fi

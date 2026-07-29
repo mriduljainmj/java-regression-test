@@ -97,9 +97,12 @@ jobs:
         run: pip install -r testgen-agent/requirements.txt
 
       - name: Clean .NET build artifacts
+        env:
+          TESTGEN_DOTNET_COMPONENT_DIR: ${{ vars.TESTGEN_DOTNET_COMPONENT_DIR || 'dotnet-component' }}
         run: |
-          if [ -d dotnet-component ]; then
-            rm -rf dotnet-component/bin dotnet-component/obj dotnet-component/bin-tests dotnet-component/obj-tests dotnet-component/TestResults
+          D="$TESTGEN_DOTNET_COMPONENT_DIR"
+          if [ -d "$D" ]; then
+            rm -rf "$D/bin" "$D/obj" "$D/bin-tests" "$D/obj-tests" "$D/TestResults"
           fi
 
       - name: Regenerate tests with QA guidance (push to same PR branch)
@@ -116,6 +119,11 @@ jobs:
           TESTGEN_FORCE_PROJECT_TYPE: ${{ steps.meta.outputs.ptype }}
           TESTGEN_MODEL_RETRIES: "3"
           TESTGEN_BACKOFF_SECONDS: "20,45,90"
+          # Same portability contract as generate-tests.yml — see that file's header.
+          TESTGEN_COMPONENT_DIR: ${{ vars.TESTGEN_COMPONENT_DIR || 'java-component' }}
+          TESTGEN_DOTNET_COMPONENT_DIR: ${{ vars.TESTGEN_DOTNET_COMPONENT_DIR || 'dotnet-component' }}
+          TESTGEN_DOTNET_TEST_PROJECT: ${{ vars.TESTGEN_DOTNET_TEST_PROJECT || 'BP.Tests.csproj' }}
+          TESTGEN_UI_COMPONENT_DIR: ${{ vars.TESTGEN_UI_COMPONENT_DIR || 'frontend-react' }}
         run: |
           git config user.name "testgen-agent"
           git config user.email "testgen-agent@users.noreply.github.com"

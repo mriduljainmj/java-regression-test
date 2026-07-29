@@ -84,21 +84,39 @@ else:
         "google/gemma-4-26b-a4b-it:free",
     ]
 
-JAVA_SOURCE_MARKER = "src/main/java"
-JAVA_TEST_MARKER = "src/test/java"
-FEATURES_DIR_MARKER = "src/test/resources/features"
+# Java paths are scoped to COMPONENT_DIR (not bare "src/main/java" anywhere in the
+# repo) so this agent can be dropped into a real repo that has other, unrelated
+# Java code alongside the component it should actually test. Each is still
+# individually overridable for repos that don't follow the Maven convention.
+JAVA_SOURCE_MARKER = os.environ.get("TESTGEN_JAVA_SOURCE_MARKER", f"{COMPONENT_DIR}/src/main/java")
+JAVA_TEST_MARKER = os.environ.get("TESTGEN_JAVA_TEST_MARKER", f"{COMPONENT_DIR}/src/test/java")
+FEATURES_DIR_MARKER = os.environ.get(
+    "TESTGEN_JAVA_FEATURES_DIR", f"{COMPONENT_DIR}/src/test/resources/features"
+)
 
-# .NET support
+# .NET support — same portability contract as Java/UI: a single component-dir env
+# var (default matches this demo repo's layout) plus an override for the specific
+# test project file, since a real .NET solution's test project is rarely named
+# BP.Tests.csproj.
 CS_SOURCE_EXT = ".cs"
-FEATURES_DIR_MARKER_DOTNET = "dotnet-component/Tests/Features"
-DOTNET_TESTS_DIR_MARKER = "dotnet-component/Tests/"
+DOTNET_COMPONENT_DIR = os.environ.get("TESTGEN_DOTNET_COMPONENT_DIR", "dotnet-component")
+DOTNET_TEST_PROJECT = os.environ.get("TESTGEN_DOTNET_TEST_PROJECT", "BP.Tests.csproj")
+FEATURES_DIR_MARKER_DOTNET = os.environ.get(
+    "TESTGEN_DOTNET_FEATURES_DIR", f"{DOTNET_COMPONENT_DIR}/Tests/Features"
+)
+DOTNET_TESTS_DIR_MARKER = os.environ.get(
+    "TESTGEN_DOTNET_TESTS_DIR", f"{DOTNET_COMPONENT_DIR}/Tests/"
+)
 
 # Front-end UI support (Playwright + Cucumber-JS). Framework-agnostic: the tests
-# drive the rendered DOM, so React/Vue/Svelte/plain HTML all route here.
-UI_SOURCE_MARKER = os.environ.get("TESTGEN_UI_SOURCE_MARKER", "frontend-react/src")
-UI_TESTS_DIR_MARKER = os.environ.get("TESTGEN_UI_TESTS_DIR", "frontend-react/tests/")
-UI_FEATURES_DIR_MARKER = os.environ.get("TESTGEN_UI_FEATURES_DIR", "frontend-react/tests/features")
+# drive the rendered DOM, so React/Vue/Svelte/plain HTML all route here. Markers
+# derive from UI_COMPONENT_DIR (same portability contract as Java/.NET above),
+# each still individually overridable for a layout that doesn't follow the
+# component/src, component/tests/, component/tests/features convention.
 UI_COMPONENT_DIR = os.environ.get("TESTGEN_UI_COMPONENT_DIR", "frontend-react")
+UI_SOURCE_MARKER = os.environ.get("TESTGEN_UI_SOURCE_MARKER", f"{UI_COMPONENT_DIR}/src")
+UI_TESTS_DIR_MARKER = os.environ.get("TESTGEN_UI_TESTS_DIR", f"{UI_COMPONENT_DIR}/tests/")
+UI_FEATURES_DIR_MARKER = os.environ.get("TESTGEN_UI_FEATURES_DIR", f"{UI_COMPONENT_DIR}/tests/features")
 UI_SOURCE_EXTS = (".jsx", ".tsx", ".vue", ".svelte", ".js", ".ts")
 
 # GitHub sends this as `before` on the first push to a branch.
@@ -160,12 +178,12 @@ def _dotnet_relevance_score(rel_path: str) -> int:
 def _select_dotnet_context_files(repo: Path, changed_files: list[str]) -> list[str]:
     changed_cs = [
         rel for rel in changed_files
-        if rel.startswith("dotnet-component/") and rel.endswith(CS_SOURCE_EXT)
+        if rel.startswith(f"{DOTNET_COMPONENT_DIR}/") and rel.endswith(CS_SOURCE_EXT)
     ]
     all_component_cs = [
         str(p.relative_to(repo))
         for p in _iter_repo_files(repo, "*.cs")
-        if str(p.relative_to(repo)).startswith("dotnet-component/")
+        if str(p.relative_to(repo)).startswith(f"{DOTNET_COMPONENT_DIR}/")
     ]
 
     unchanged_cs = [p for p in all_component_cs if p not in changed_cs]
@@ -441,7 +459,7 @@ def gather_context(state: TestGenState) -> TestGenState:
         selected_cs = _select_dotnet_context_files(repo, changed_files)
         changed_cs_set = {
             rel for rel in changed_files
-            if rel.startswith("dotnet-component/") and rel.endswith(CS_SOURCE_EXT)
+            if rel.startswith(f"{DOTNET_COMPONENT_DIR}/") and rel.endswith(CS_SOURCE_EXT)
         }
         for rel in selected_cs:
             path = repo / rel
@@ -454,7 +472,7 @@ def gather_context(state: TestGenState) -> TestGenState:
 
         for cs in _iter_repo_files(repo, "*StepDefinitions.cs"):
             rel = str(cs.relative_to(repo))
-            if not rel.startswith("dotnet-component/Tests/"):
+            if not rel.startswith(DOTNET_TESTS_DIR_MARKER):
                 continue
             text = _read(cs)
             patterns = extract_step_patterns(text)
@@ -470,7 +488,7 @@ def gather_context(state: TestGenState) -> TestGenState:
     features: list = []
     for feature in _iter_repo_files(repo, "*.feature"):
         rel = str(feature.relative_to(repo))
-        if project_type == "dotnet" and not rel.startswith("dotnet-component/Tests/Features/"):
+        if project_type == "dotnet" and not rel.startswith(f"{FEATURES_DIR_MARKER_DOTNET}/"):
             continue
         if project_type == "java" and FEATURES_DIR_MARKER not in rel:
             continue
@@ -829,7 +847,7 @@ def _pure_route_rename(git_diff: str) -> bool:
         if line.startswith("--- ") or not (line.startswith("+") or line.startswith("-")):
             continue
         is_component_src = bool(cur) and (
-            ("java-component/src/main" in cur or ("dotnet-component" in cur and "/Tests/" not in cur))
+            (f"{COMPONENT_DIR}/src/main" in cur or (DOTNET_COMPONENT_DIR in cur and "/Tests/" not in cur))
             and cur.endswith((".java", ".cs"))
         )
         if not is_component_src:
@@ -856,7 +874,7 @@ def _deterministic_rename_generation(state: TestGenState):
     glue_paths = []
     if project_type == "dotnet":
         for cs in _iter_repo_files(repo, "*StepDefinitions.cs"):
-            if str(cs.relative_to(repo)).startswith("dotnet-component/Tests/"):
+            if str(cs.relative_to(repo)).startswith(DOTNET_TESTS_DIR_MARKER):
                 glue_paths.append(cs)
     else:
         for j in _iter_repo_files(repo, "*.java"):
@@ -1103,25 +1121,25 @@ def validate_output(state: TestGenState) -> TestGenState:
         # other component. This is what stopped a .NET change from producing a
         # java-component feature (and then running mvn) in earlier runs.
         if project_type == "dotnet":
-            if "dotnet-component/Tests/Features" not in name:
+            if FEATURES_DIR_MARKER_DOTNET not in name:
                 errors.append(
                     f"{name}: this is a .NET run — feature files MUST be under "
-                    f"dotnet-component/Tests/Features/. Do NOT write to java-component/ "
+                    f"{FEATURES_DIR_MARKER_DOTNET}/. Do NOT write to {COMPONENT_DIR}/ "
                     f"or any other project. Regenerate at "
-                    f"dotnet-component/Tests/Features/{name.split('/')[-1]}"
+                    f"{FEATURES_DIR_MARKER_DOTNET}/{name.split('/')[-1]}"
                 )
         elif project_type == "ui":
             if not name.startswith(UI_FEATURES_DIR_MARKER):
                 errors.append(
                     f"{name}: this is a UI run — feature files MUST be under "
-                    f"{UI_FEATURES_DIR_MARKER}/ (not under java-component/ or dotnet-component/). "
+                    f"{UI_FEATURES_DIR_MARKER}/ (not under {COMPONENT_DIR}/ or {DOTNET_COMPONENT_DIR}/). "
                     f"Regenerate at {UI_FEATURES_DIR_MARKER}/{name.split('/')[-1]}"
                 )
         else:  # java
             if FEATURES_DIR_MARKER not in name:
                 errors.append(
                     f"{name}: this is a Java run — features must live under "
-                    f"src/test/resources/features/ (not under dotnet-component/)."
+                    f"{FEATURES_DIR_MARKER}/ (not under {DOTNET_COMPONENT_DIR}/)."
                 )
         
         if not target.is_relative_to(repo):
@@ -1145,11 +1163,11 @@ def validate_output(state: TestGenState) -> TestGenState:
         # undefined steps. Feed exact offenders back.
         if all_patterns:
             if project_type == "dotnet":
-                glue_loc = "dotnet-component/Tests/StepDefinitions/"
+                glue_loc = f"{DOTNET_TESTS_DIR_MARKER}StepDefinitions/"
             elif project_type == "ui":
                 glue_loc = f"{UI_TESTS_DIR_MARKER}steps/"
             else:
-                glue_loc = "java-component/src/test/java/.../cucumber/"
+                glue_loc = f"{JAVA_TEST_MARKER}/.../cucumber/"
             for step in find_undefined_steps(feature.gherkin_content, all_patterns):
                 message = (
                     f'{name}: step "{step}" matches no existing step definition. '
@@ -1276,7 +1294,7 @@ def _extract_dotnet_compile_errors(build_output: str) -> list:
 def _extract_dotnet_test_failures(repo: Path) -> list:
     """Parse .NET TRX XML report for failed test results."""
     # Find the most recent TRX file
-    test_results_dir = repo / "dotnet-component" / "TestResults"
+    test_results_dir = repo / DOTNET_COMPONENT_DIR / "TestResults"
     if not test_results_dir.exists():
         return []
     
@@ -1314,8 +1332,8 @@ def run_generated_tests(state: TestGenState) -> TestGenState:
     """Run tests for generated code; on failure, capture compile errors and test
     failures so the model can correct itself.
 
-    For Java: runs `mvn test` on the java-component.
-    For .NET: runs `dotnet test` on the BP.Tests.csproj project.
+    For Java: runs `mvn test` on COMPONENT_DIR.
+    For .NET: runs `dotnet test` on DOTNET_COMPONENT_DIR/DOTNET_TEST_PROJECT.
     
     Skips gracefully when tools aren't available or there's nothing to run."""
     repo = Path(state["repo_path"]).resolve()
@@ -1389,7 +1407,7 @@ def _run_dotnet_tests(repo: Path, state: TestGenState) -> TestGenState:
         return {"tests_passed": True, "test_failures": [],
                 "test_report": "test execution skipped (dotnet CLI not available in this environment)"}
 
-    project_file = str(repo / "dotnet-component" / "BP.Tests.csproj")
+    project_file = str(repo / DOTNET_COMPONENT_DIR / DOTNET_TEST_PROJECT)
     logger.info("Running .NET tests: dotnet test %s", project_file)
     proc = subprocess.run(
         ["dotnet", "test", project_file, "--nologo", "--verbosity", "minimal", "--logger", "trx"],

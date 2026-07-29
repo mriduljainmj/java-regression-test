@@ -24,8 +24,8 @@ public class InventorySteps {
 }
 '''
 
-GLUE_PATH = "component/src/test/java/com/example/InventorySteps.java"
-FEATURE_PATH = "component/src/test/resources/features/inventory.feature"
+GLUE_PATH = "java-component/src/test/java/com/example/InventorySteps.java"
+FEATURE_PATH = "java-component/src/test/resources/features/inventory.feature"
 
 
 def make_state(repo, generation):
@@ -41,8 +41,8 @@ class GlueValidationTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.repo = Path(self._tmp.name)
-        (self.repo / "component/src/test/java/com/example").mkdir(parents=True)
-        (self.repo / "component/src/test/resources/features").mkdir(parents=True)
+        (self.repo / "java-component/src/test/java/com/example").mkdir(parents=True)
+        (self.repo / "java-component/src/test/resources/features").mkdir(parents=True)
 
     def tearDown(self):
         self._tmp.cleanup()

@@ -1,25 +1,39 @@
 name: UI Regression (Playwright)
 
 # Runs the front-end UI regression suite (Cucumber + Playwright) whenever the
-# React app or its tests change — the browser-enabled counterpart to the backend
+# UI app or its tests change — the browser-enabled counterpart to the backend
 # regression workflow. This is the "run the generated tests" half of the agent's
-# UI mode: the agent writes frontend-react/tests/**, this executes them.
+# UI mode: the agent writes <component>/tests/**, this executes them.
+#
+# Portability: the working directory is driven by the TESTGEN_UI_COMPONENT_DIR
+# repository variable (Settings → Actions → Variables), defaulting to this demo
+# repo's 'frontend-react'. Only the `paths:` trigger below can't be dynamic
+# (GitHub evaluates it before vars are available) — edit the frontend-react/**
+# entry when copying this into a repo with a different UI folder name; the
+# extension-based entries already work regardless of folder.
 
 on:
   push:
     paths:
       - 'frontend-react/**'
+      - '**/*.jsx'
+      - '**/*.tsx'
+      - '**/*.vue'
+      - '**/*.svelte'
   pull_request:
     paths:
       - 'frontend-react/**'
+      - '**/*.jsx'
+      - '**/*.tsx'
+      - '**/*.vue'
+      - '**/*.svelte'
   workflow_dispatch:
 
 jobs:
   ui-tests:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend-react
+    env:
+      TESTGEN_UI_COMPONENT_DIR: ${{ vars.TESTGEN_UI_COMPONENT_DIR || 'frontend-react' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -28,12 +42,15 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
+        working-directory: ${{ env.TESTGEN_UI_COMPONENT_DIR }}
         run: npm install
 
       - name: Install Playwright browser
+        working-directory: ${{ env.TESTGEN_UI_COMPONENT_DIR }}
         run: npx playwright install --with-deps chromium
 
       - name: Run UI regression suite
+        working-directory: ${{ env.TESTGEN_UI_COMPONENT_DIR }}
         run: npm test
 
       - name: Upload test report
@@ -41,5 +58,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ui-test-report
-          path: frontend-react/reports/
+          path: ${{ env.TESTGEN_UI_COMPONENT_DIR }}/reports/
           if-no-files-found: ignore
