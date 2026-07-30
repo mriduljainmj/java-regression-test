@@ -27,6 +27,9 @@ What counts as observable (ALWAYS requires a scenario):
   Example: adding "price > 100000 -> 400 with message X" IS observable and MUST get a
   Scenario asserting status 400 and the message. Never call such a change "no
   observable behavior".
+- If reviewer guidance contains a STRUCTURED QA REQUEST with a FILE path and/or
+  provided Gherkin content, treat it as mandatory: create/update that exact
+  feature file and preserve the QA-provided scenario intent.
 
 ENDPOINT PATHS LIVE IN THE STEP DEFINITIONS, NOT THE GHERKIN:
 - The .feature files describe behavior in business language and contain NO URLs — the
@@ -94,6 +97,8 @@ Mandatory behavior:
 - Generate feature files for impacted behavior.
 - Reuse existing step definitions whenever possible.
 - Add STEPDEF blocks only for new wording not covered by existing bindings.
+- If reviewer guidance includes a STRUCTURED QA REQUEST with FILE/content, create
+  or update that exact feature file path and preserve requested scenarios.
 - If you create a new feature file, also create or update the C# step definitions
   required to bind its new steps. Do not leave a newly-created .feature file without
   matching glue for every custom step phrase.

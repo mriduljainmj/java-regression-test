@@ -19,10 +19,15 @@ CRITICAL ANALYSIS STEPS
    change: response field values (including string prefixes/suffixes, formatting,
    computed values), status codes, headers, and error messages — even when the
    endpoint signatures themselves are untouched.
+    If reviewer guidance includes a STRUCTURED QA REQUEST with a target FILE path
+    and/or provided Gherkin content, treat it as mandatory: create/update that exact
+    feature file and preserve the QA-provided scenario intent.
 3. Determine Regression Scope: identify what existing functionality could
    inadvertently break due to this change.
 4. Detect Stale Assertions: walk through EVERY existing scenario and mentally
    execute it against the post-change code. If a code change makes an existing
+    If QA requested a new feature file or added new step phrases in guidance, you
+    MUST add/update Java step-definition files so every generated step is bound.
    assertion incorrect (e.g. the service now transforms a value the scenario
    asserts verbatim), you MUST return that feature file with action UPDATE and
    the assertions corrected to match the new intended behavior.

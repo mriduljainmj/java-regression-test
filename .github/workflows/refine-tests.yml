@@ -81,6 +81,34 @@ jobs:
             exit 1
           fi
 
+      - name: Parse QA structured request (optional)
+        id: qa
+        env:
+          GUIDANCE: ${{ steps.meta.outputs.guidance }}
+        run: |
+          MODE=$(printf '%s\n' "$GUIDANCE" | sed -nE 's/^MODE:[[:space:]]*([A-Za-z0-9_-]+).*/\1/p' | head -n1 | tr '[:upper:]' '[:lower:]')
+          FILE_PATH=$(printf '%s\n' "$GUIDANCE" | sed -nE 's/^FILE:[[:space:]]*([^[:space:]].*)$/\1/p' | head -n1)
+          if [ -z "$MODE" ]; then MODE="comment"; fi
+
+          FEATURE_CONTENT=$(printf '%s\n' "$GUIDANCE" | awk '
+            BEGIN { inblock=0 }
+            /^```(gherkin)?[[:space:]]*$/ {
+              if (inblock==0) { inblock=1; next }
+              else { inblock=0; exit }
+            }
+            inblock==1 { print }
+          ')
+
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "file_path=$FILE_PATH" >> "$GITHUB_OUTPUT"
+          {
+            echo "feature_content<<TESTGEN_EOF"
+            echo "$FEATURE_CONTENT"
+            echo "TESTGEN_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Parsed QA request: mode=$MODE file_path=${FILE_PATH:-<none>}"
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -112,6 +140,9 @@ jobs:
           AZDO_PROJECT: ${{ secrets.AZDO_PROJECT }}
           AZDO_PAT: ${{ secrets.AZDO_PAT }}
           GUIDANCE: ${{ steps.meta.outputs.guidance }}
+          TESTGEN_QA_MODE: ${{ steps.qa.outputs.mode }}
+          TESTGEN_QA_FILE_PATH: ${{ steps.qa.outputs.file_path }}
+          TESTGEN_QA_FEATURE_CONTENT: ${{ steps.qa.outputs.feature_content }}
           TESTGEN_PR_BRANCH: ${{ github.event.pull_request.head.ref }}
           TESTGEN_FORCE_PROJECT_TYPE: ${{ steps.meta.outputs.ptype }}
           TESTGEN_MODEL_RETRIES: "3"

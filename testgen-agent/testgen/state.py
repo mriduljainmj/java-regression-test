@@ -68,6 +68,9 @@ class TestGenState(TypedDict, total=False):
     ado_work_item_id: str
     ado_work_item_context: str
     reviewer_guidance: str  # free-text edge-case hints from a human, injected into the prompt
+    qa_mode: str
+    qa_file_path: str
+    qa_feature_content: str
     resolved_base: str
     project_type: str  # "java" | "dotnet" — detected in collect_diff, must persist end-to-end
 

@@ -347,6 +347,35 @@ def gather_context(state: TestGenState) -> TestGenState:
     # testgen-guidance.md file at the repo root (the label-refine flow writes the QA
     # comment into that file before running).
     reviewer_guidance = (state.get("reviewer_guidance") or _read_guidance_file(repo)).strip()
+
+    # Optional structured QA request extracted by refine-tests workflow.
+    qa_mode = (state.get("qa_mode") or os.environ.get("TESTGEN_QA_MODE", "")).strip().lower()
+    qa_file_path = (state.get("qa_file_path") or os.environ.get("TESTGEN_QA_FILE_PATH", "")).strip()
+    qa_feature_content = (state.get("qa_feature_content") or os.environ.get("TESTGEN_QA_FEATURE_CONTENT", "")).strip()
+
+    if qa_mode or qa_file_path or qa_feature_content:
+        qa_mode = qa_mode or "comment"
+        qa_lines = [
+            "",
+            "[STRUCTURED QA REQUEST]",
+            f"mode: {qa_mode}",
+        ]
+        if qa_file_path:
+            qa_lines.append(f"requested_feature_file: {qa_file_path}")
+        if qa_feature_content:
+            qa_lines.extend([
+                "requested_feature_content:",
+                "---",
+                qa_feature_content,
+                "---",
+            ])
+        reviewer_guidance = (reviewer_guidance + "\n" + "\n".join(qa_lines)).strip()
+        logger.info(
+            "Structured QA request detected (mode=%s, file=%s, content_chars=%d)",
+            qa_mode,
+            qa_file_path or "<none>",
+            len(qa_feature_content),
+        )
     if reviewer_guidance:
         logger.info("Reviewer guidance provided (%d chars) — model must cover the named edge cases", len(reviewer_guidance))
     else:
@@ -440,11 +469,29 @@ def gather_context(state: TestGenState) -> TestGenState:
         "ado_work_item_id": ado_work_item_id,
         "ado_work_item_context": ado_work_item_context[:MAX_CONTEXT_CHARS],
         "reviewer_guidance": reviewer_guidance[:MAX_CONTEXT_CHARS],
+        "qa_mode": qa_mode,
+        "qa_file_path": qa_file_path,
+        "qa_feature_content": qa_feature_content[:MAX_CONTEXT_CHARS],
         "step_patterns": step_patterns,
         "attempts": 0,
         "validation_errors": [],
         "project_type": project_type,
     }
+
+
+def _important_gherkin_lines(text: str, limit: int = 8) -> list[str]:
+    lines = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        low = line.lower()
+        if low.startswith("feature:") or low.startswith("scenario") or low.startswith("given ") \
+           or low.startswith("when ") or low.startswith("then ") or low.startswith("and ") or low.startswith("but "):
+            lines.append(line)
+        if len(lines) >= limit:
+            break
+    return lines
 
 
 def _get_prompt_module(project_type: str):
@@ -833,6 +880,8 @@ def validate_output(state: TestGenState) -> TestGenState:
     generation = state.get("generation")
     project_type = state.get("project_type", "java")
     git_diff = state.get("git_diff", "")
+    qa_file_path = (state.get("qa_file_path") or "").strip().lstrip("./")
+    qa_feature_content = (state.get("qa_feature_content") or "").strip()
 
     # Route/path RENAME but an EMPTY generation: the model typically explains in its
     # analysis that "the step definitions must be updated" and then forgets to emit
@@ -887,6 +936,35 @@ def validate_output(state: TestGenState) -> TestGenState:
     if generation is None:
         # generate_tests already recorded parse errors; pass them through.
         return {}
+
+    # If QA explicitly requested a feature-file path in refine mode, enforce it.
+    if qa_file_path:
+        requested = qa_file_path
+        requested_feature = None
+        for f in generation.new_or_modified_features:
+            if f.file_name.lstrip("./") == requested:
+                requested_feature = f
+                break
+        if requested_feature is None:
+            return {
+                "validation_errors": [
+                    f"QA requested feature file '{requested}', but it was not returned. "
+                    "Return that exact file path as a FEATURE CREATE/UPDATE block."
+                ]
+            }
+        if qa_feature_content:
+            missing = [
+                ln for ln in _important_gherkin_lines(qa_feature_content)
+                if ln not in requested_feature.gherkin_content
+            ]
+            if missing:
+                preview = "\n".join(f"- {m}" for m in missing[:5])
+                return {
+                    "validation_errors": [
+                        "QA provided feature content was not preserved in the requested file. "
+                        "Ensure these lines appear in the generated feature file:\n" + preview
+                    ]
+                }
 
     repo = Path(state["repo_path"]).resolve()
     step_patterns = state.get("step_patterns", [])
