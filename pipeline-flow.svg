@@ -62,6 +62,12 @@
 <path d="M630,752 L550,752" fill="none" stroke="#0d9488" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ah)"/>
 <text class="tl" x="632" y="736" text-anchor="start">comment dialog</text>
 
+<!-- regression report note -->
+<path d="M550,932 L640,932" fill="none" stroke="#8a94a6" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ah)"/>
+<text class="tl" x="646" y="928" text-anchor="start">[reports at:</text>
+<text class="tl" x="646" y="944" text-anchor="start">java-component/target,</text>
+<text class="tl" x="646" y="960" text-anchor="start">dotnet-component/TestResults]</text>
+
 <!-- pass / fail fork -->
 <line x1="420" y1="958" x2="228" y2="1006" stroke="#34a853" stroke-width="1.5" marker-end="url(#ah)"/>
 <text class="ts" x="322" y="986" text-anchor="start">pass</text>
