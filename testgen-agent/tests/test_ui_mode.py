@@ -102,7 +102,7 @@ class UiValidationTest(unittest.TestCase):
         self.assertEqual(out["validation_errors"], [])
 
     def test_feature_outside_ui_dir_rejected(self):
-        out = validate_output(_ui_state(self.repo, self._gen(feature_path="web-ui/features/widget.feature")))
+        out = validate_output(_ui_state(self.repo, self._gen(feature_path="legacy-ui/features/widget.feature")))
         self.assertTrue(any("UI run" in e for e in out["validation_errors"]))
 
     def test_non_js_glue_rejected(self):

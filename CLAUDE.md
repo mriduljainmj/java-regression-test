@@ -15,7 +15,6 @@ mind-map of the system.
 | `java-component/` | Demo fixture: Spring Boot app + Cucumber tests (Java lane's target) |
 | `dotnet-component/` | Demo fixture: ASP.NET Core app + SpecFlow tests (.NET lane's target) |
 | `frontend-react/` | Demo fixture: React app + Cucumber-JS/Playwright tests (UI lane's target) |
-| `web-ui/` | An earlier plain-HTML/JS demo UI — not wired into the generation pipeline, kept for reference |
 | `.github/workflows/` | The 5 CI workflows driving the pipeline (see below) |
 | `PROJECT.md` | QA-owned mind-map: per-controller criticality (LOW/MEDIUM/HIGH), skip list |
 
@@ -114,8 +113,7 @@ delete/rename them casually, that's how diff-loss-on-failure protection works.
   directly — the `export default {...}` object **is** the profile already.
   Wrapping it in another `{ default: {...} }` nests everything one level too
   deep and silently produces **0 scenarios found**, no error. (Found in
-  `frontend-react/cucumber.mjs`; `web-ui/cucumber.js` is CommonJS and doesn't
-  have this problem.)
+  `frontend-react/cucumber.mjs`.)
 - **`generate-tests.yml`'s per-type bash blocks run with `working-directory:
   testgen-agent`** — any path referencing the repo root (e.g. the UI's `npm
   install`) must use `$GITHUB_WORKSPACE`, not a bare relative path.
@@ -126,8 +124,8 @@ delete/rename them casually, that's how diff-loss-on-failure protection works.
   `generate-tests.yml` above); two backends of the same language sharing one
   repo is not — would need per-project discovery (nearest `pom.xml`/`*.csproj`
   ancestor), which hasn't been built.
-- **Test-run screenshots/logs**: both UI suites (`web-ui`, `frontend-react`)
-  log every step via a shared `log.step(...)` helper and capture a full-page
+- **Test-run screenshots/logs**: the UI suite (`frontend-react`)
+  logs every step via a shared `log.step(...)` helper and capture a full-page
   Playwright screenshot to `reports/screenshots/` on any failed scenario
   (attached inline to the Cucumber HTML report too). `HEADLESS=false` (+
   optional `SLOWMO=<ms>`) opens a real visible browser for `npm test`.

@@ -13,7 +13,7 @@ name: Cucumber regression
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop,ui-feature]
     paths:
       - "**/*.java"
       - "dotnet-component/**"
