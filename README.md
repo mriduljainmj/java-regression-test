@@ -84,8 +84,9 @@ flowchart TD
   E --> G[regression.yml]
   E --> H[auto-update-mindmap.yml]
 
-  F --> F1[Detect Java vs .NET from changed files]
-  F1 --> F2["Agent generate to validate to run tests; uses code diff, ADO ticket description, and developer comments as guidance"]
+  TG[testgen-guidance.md\nOptional edge cases and expected tests] -.-> F2
+  F --> F1[Detect Java / .NET / UI changes]
+  F1 --> F2["Agent generate to validate to run tests; uses code diff, ADO ticket description, and testgen-guidance.md as guidance"]
   F2 --> F3{Generation result}
   F3 -->|Pass or max retries reached| I[Create or update test PR]
   F3 -->|No relevant change| J[Skip]
@@ -96,6 +97,7 @@ flowchart TD
   H --> H1["Update PROJECT.md if needed; mindmap update uses regex parsing of changed files and endpoints"]
 
   I --> K[QA reviews generated test PR]
+  QC[PR comment dialog\nAdd short notes, test cases, or a new feature file request] -.-> L
   K --> L[QA comment + add label regen-tests]
   L --> M[refine-tests.yml reruns agent with guidance]
   M --> N[Push updates to same PR branch]
