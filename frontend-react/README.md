@@ -1,10 +1,9 @@
 # frontend-react — React Product Catalog + UI automation
 
-A **second frontend** — same app as `web-ui/`, but written in **React (Vite)** instead
-of plain HTML/JS. It exists to prove the point behind the agent's UI mode: **UI
+A **frontend demo** written in **React (Vite)** to prove the point behind the agent's UI mode: **UI
 automation targets the rendered DOM, not the source framework.** The Cucumber
-`.feature` and Playwright step definitions here are byte-for-byte the same shape as
-the plain-HTML ones — because both render to the same DOM (`data-testid` hooks).
+`.feature` and Playwright step definitions here are shaped to exercise the same DOM
+hooks (`data-testid`) that the agent targets.
 
 The catalog mirrors the Products API contract (`java-component` `ProductRequest` /
 `ProductService`): name required / ≤ 100 chars, price `> 0` and `≤ 300000.00`, and a
