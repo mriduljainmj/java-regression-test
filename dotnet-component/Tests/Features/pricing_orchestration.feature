@@ -15,18 +15,18 @@ Feature: Pricing orchestration
     Examples:
       | quantity | loyalty | base | loyaltyPercent | total |
       | 5        | false   | 0    | 0               | 0     |
-      | 5        | true    | 0    | 4               | 4     |
+      | 5        | true    | 0    | 6               | 6     |
       | 10       | false   | 8    | 0               | 8     |
-      | 10       | true    | 8    | 4               | 12    |
+      | 10       | true    | 8    | 6               | 14    |
       | 24       | false   | 8    | 0               | 8     |
-      | 24       | true    | 8    | 4               | 12    |
+      | 24       | true    | 8    | 6               | 14    |
       | 25       | false   | 15   | 0               | 15    |
-      | 25       | true    | 15   | 4               | 19    |
+      | 25       | true    | 15   | 6               | 21    |
       | 49       | false   | 15   | 0               | 15    |
-      | 49       | true    | 15   | 4               | 19    |
+      | 49       | true    | 15   | 6               | 21    |
       | 50       | false   | 18   | 0               | 18    |
-      | 50       | true    | 18   | 4               | 22    |
-      | 100      | true    | 18   | 4               | 22    |
+      | 50       | true    | 18   | 6               | 24    |
+      | 100      | true    | 18   | 6               | 24    |
 
   Scenario: API A calculates order total using API B response
     When a client POSTs /api/order-total-from-policy with body
@@ -34,8 +34,8 @@ Feature: Pricing orchestration
       { "UnitPrice": 100.00, "Quantity": 1, "IsLoyaltyMember": true }
       """
     Then the response status should be 200
-    And the response JSON should contain "TotalDiscountPercent": 4
-    And the response JSON should contain decimal "FinalTotal": 96.00
+    And the response JSON should contain "TotalDiscountPercent": 6
+    And the response JSON should contain decimal "FinalTotal": 94.00
     And the response JSON should contain "PolicyVersion": "v1"
 
   Scenario: API A rejects request with non‑positive quantity

@@ -20,7 +20,7 @@ namespace BP.Controllers
                 return BadRequest(new { message = "Quantity must be greater than 0." });
 
             int baseDiscountPercent = quantity >= 50 ? 18 : quantity >= 25 ? 15 : quantity >= 10 ? 8 : 0;
-            int loyaltyDiscountPercent = isLoyaltyMember ? 5 : 0;
+            int loyaltyDiscountPercent = isLoyaltyMember ? 6 : 0;
             int totalDiscountPercent = Math.Min(100, baseDiscountPercent + loyaltyDiscountPercent);
 
             return Ok(new DiscountPolicyResponse
