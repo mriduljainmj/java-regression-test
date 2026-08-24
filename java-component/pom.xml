@@ -18,7 +18,7 @@
     <description>Sample component under regression test generation</description>
 
     <properties>
-        <java.version>17</java.version>
+        <java.version>25</java.version>
         <cucumber.version>7.18.1</cucumber.version>
         <rest-assured.version>5.5.0</rest-assured.version>
     </properties>
