@@ -14,6 +14,30 @@ from typing import Optional
 
 _WORK_ITEM_ID_RE = re.compile(r"(?:AB#|ADO-|WI-)(\d+)", re.IGNORECASE)
 
+_AC_LINE_SPLIT_RE = re.compile(r"(?:\r?\n)+")
+_NON_WORD_RE = re.compile(r"[^a-z0-9]+")
+_STOPWORDS = {
+    "a", "an", "and", "as", "at", "be", "by", "for", "from", "in", "into", "is",
+    "it", "of", "on", "or", "that", "the", "to", "when", "with", "must", "should",
+    "can", "could", "will", "would", "then", "than", "this", "these", "those",
+}
+
+
+@dataclass
+class AdoWorkItemDetails:
+    work_item_id: str
+    title: str = ""
+    state: str = ""
+    assigned_to: str = ""
+    tags: str = ""
+    description: str = ""
+    acceptance_criteria: str = ""
+    error: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.error == ""
+
 
 def extract_work_item_id(text: str | None) -> Optional[str]:
     """Extract a numeric Azure DevOps work item id from commit/branch text.
@@ -53,13 +77,55 @@ def fetch_work_item_context(
     The function is intentionally best-effort: any API/auth/network issue
     returns a readable note instead of failing the entire generation run.
     """
+    details = fetch_work_item_details(
+        org_url=org_url,
+        project=project,
+        pat=pat,
+        work_item_id=work_item_id,
+        timeout=timeout,
+    )
+    if not details.ok:
+        if details.error == "missing_credentials":
+            return "Not available."
+        return f"Detected Azure DevOps work item {details.work_item_id}, but {details.error}."
+
+    lines = [
+        f"Azure DevOps Work Item: {details.work_item_id}",
+        f"Title: {details.title}" if details.title else "Title: (missing)",
+        f"State: {details.state}" if details.state else "State: (missing)",
+    ]
+    if details.assigned_to:
+        lines.append(f"Assigned To: {details.assigned_to}")
+    if details.tags:
+        lines.append(f"Tags: {details.tags}")
+    if details.description:
+        lines.append(f"Description: {details.description}")
+    else:
+        lines.append("Description: (missing)")
+    if details.acceptance_criteria:
+        lines.append(f"Acceptance Criteria: {details.acceptance_criteria}")
+    else:
+        lines.append("Acceptance Criteria: (missing)")
+
+    return "\n".join(lines)
+
+
+def fetch_work_item_details(
+    *,
+    org_url: str,
+    project: str,
+    pat: str,
+    work_item_id: str,
+    timeout: int = 10,
+) -> AdoWorkItemDetails:
+    """Fetch a single ADO work item in a structured form for gating decisions."""
     org_url = org_url.strip().rstrip("/")
     project = project.strip()
     pat = pat.strip()
     work_item_id = str(work_item_id).strip()
 
     if not org_url or not project or not pat or not work_item_id:
-        return "Not available."
+        return AdoWorkItemDetails(work_item_id=work_item_id, error="missing_credentials")
 
     url = (
         f"{org_url}/{project}/_apis/wit/workitems/{work_item_id}"
@@ -79,44 +145,111 @@ def fetch_work_item_context(
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        return f"Detected Azure DevOps work item {work_item_id}, but the API returned HTTP {exc.code}."
+        return AdoWorkItemDetails(work_item_id=work_item_id, error=f"the API returned HTTP {exc.code}")
     except Exception as exc:  # pragma: no cover - best-effort network helper
-        return f"Detected Azure DevOps work item {work_item_id}, but fetching details failed: {exc}."
+        return AdoWorkItemDetails(work_item_id=work_item_id, error=f"fetching details failed: {exc}")
 
     fields = payload.get("fields", {}) or {}
-    title = fields.get("System.Title", "")
-    state = fields.get("System.State", "")
     assigned_to = fields.get("System.AssignedTo", "")
-    description = _strip_html(fields.get("System.Description", ""))
-    acceptance = _strip_html(fields.get("Microsoft.VSTS.Common.AcceptanceCriteria", ""))
-    tags = fields.get("System.Tags", "")
-    tag_text = tags.replace(";", ", ") if isinstance(tags, str) else ""
-
     assigned_to_text = ""
     if isinstance(assigned_to, dict):
         assigned_to_text = str(assigned_to.get("displayName") or assigned_to.get("uniqueName") or "")
     else:
         assigned_to_text = str(assigned_to or "")
+    tags = fields.get("System.Tags", "")
+    tag_text = tags.replace(";", ", ") if isinstance(tags, str) else ""
 
-    lines = [
-        f"Azure DevOps Work Item: {work_item_id}",
-        f"Title: {title}" if title else "Title: (missing)",
-        f"State: {state}" if state else "State: (missing)",
-    ]
-    if assigned_to_text:
-        lines.append(f"Assigned To: {assigned_to_text}")
-    if tag_text:
-        lines.append(f"Tags: {tag_text}")
-    if description:
-        lines.append(f"Description: {description}")
-    else:
-        lines.append("Description: (missing)")
-    if acceptance:
-        lines.append(f"Acceptance Criteria: {acceptance}")
-    else:
-        lines.append("Acceptance Criteria: (missing)")
+    return AdoWorkItemDetails(
+        work_item_id=work_item_id,
+        title=str(fields.get("System.Title", "") or "").strip(),
+        state=str(fields.get("System.State", "") or "").strip(),
+        assigned_to=assigned_to_text.strip(),
+        tags=tag_text.strip(),
+        description=_strip_html(fields.get("System.Description", "")),
+        acceptance_criteria=_strip_html(fields.get("Microsoft.VSTS.Common.AcceptanceCriteria", "")),
+    )
 
-    return "\n".join(lines)
+
+def validate_work_item_requirements(details: AdoWorkItemDetails) -> tuple[bool, str]:
+    """Validate minimum ADO requirements for ADO-first gating."""
+    if not details.work_item_id:
+        return False, "missing_work_item_id"
+    if not details.ok:
+        if details.error == "missing_credentials":
+            return False, "missing_ado_credentials"
+        return False, "ado_fetch_failed"
+    if not details.description:
+        return False, "missing_description"
+    if not details.acceptance_criteria:
+        return False, "missing_acceptance_criteria"
+    return True, "ok"
+
+
+def extract_acceptance_items(text: str, *, max_items: int = 30) -> list[str]:
+    """Extract normalized acceptance criteria lines from plain text."""
+    if not text:
+        return []
+    items: list[str] = []
+    for raw in _AC_LINE_SPLIT_RE.split(text):
+        line = raw.strip().strip("-*")
+        if not line:
+            continue
+        # Also split sentence-style acceptance criteria blocks.
+        for piece in re.split(r"(?<=[.!?])\s+", line):
+            cleaned = piece.strip()
+            if len(cleaned) < 8:
+                continue
+            items.append(cleaned)
+            if len(items) >= max_items:
+                return items
+    return items
+
+
+def _criterion_tokens(text: str) -> list[str]:
+    words = [w for w in _NON_WORD_RE.split(text.lower()) if len(w) >= 3 and w not in _STOPWORDS]
+    # Keep deterministic order while de-duplicating.
+    seen = set()
+    out = []
+    for w in words:
+        if w in seen:
+            continue
+        seen.add(w)
+        out.append(w)
+    return out
+
+
+def criteria_coverage_report(
+    *, acceptance_criteria: str, git_diff: str, changed_files: list[str]
+) -> dict:
+    """Heuristic coverage report: do criteria keywords appear in changed code context?"""
+    criteria = extract_acceptance_items(acceptance_criteria)
+    haystack = (git_diff or "").lower() + "\n" + "\n".join(changed_files or []).lower()
+    matched: list[str] = []
+    missing: list[str] = []
+
+    for criterion in criteria:
+        tokens = _criterion_tokens(criterion)
+        if not tokens:
+            matched.append(criterion)
+            continue
+        hits = sum(1 for token in tokens if token in haystack)
+        required_hits = 1 if len(tokens) == 1 else 2
+        if hits >= required_hits:
+            matched.append(criterion)
+        else:
+            missing.append(criterion)
+
+    return {
+        "covered": len(criteria) > 0 and len(missing) == 0,
+        "criteria_count": len(criteria),
+        "matched": matched,
+        "missing": missing,
+        "summary": (
+            f"criteria={len(criteria)} matched={len(matched)} missing={len(missing)}"
+            if criteria
+            else "criteria=0 matched=0 missing=0"
+        ),
+    }
 
 
 def _to_html(text: str) -> str:

@@ -57,6 +57,8 @@ def main() -> int:
     run_url = f"{server}/{repo}/actions/runs/{run_id}" if repo and run_id else ""
     commit_url = f"{server}/{repo}/commit/{sha}" if repo and sha != "HEAD" else ""
     is_high_severity = (os.environ.get("REGRESSION_HIGH_SEVERITY", "").strip().lower() == "true")
+    failure_reason = os.environ.get("REGRESSION_FAILURE_REASON", "test_execution_failure").strip() or "test_execution_failure"
+    failure_evidence = os.environ.get("REGRESSION_FAILURE_EVIDENCE", "").strip()
 
     head_message = _git(["log", "-1", "--format=%B", sha])
     author_email = _git(["log", "-1", "--format=%ae", sha])
@@ -74,18 +76,31 @@ def main() -> int:
         source = "commit author"
 
     severity_prefix = "HIGH severity: " if is_high_severity else ""
-    title = f"{severity_prefix}Regression tests failing for {component}"
+    ado_gate_reasons = {
+        "ado_context_missing", "ado_acceptance_missing", "ado_criteria_mismatch",
+        "missing_work_item_id", "missing_ado_credentials", "ado_fetch_failed",
+        "missing_description", "missing_acceptance_criteria",
+    }
+    if failure_reason in ado_gate_reasons:
+        title = f"{severity_prefix}ADO gate failed for {component}"
+        opening = f"ADO-first validation failed for {component}."
+    else:
+        title = f"{severity_prefix}Regression tests failing for {component}"
+        opening = f"The automated regression suite failed for {component}."
+
     description = "\n".join(
         line for line in [
-            f"The automated regression suite failed for {component}.",
+            opening,
             "Severity: HIGH" if is_high_severity else "Severity: STANDARD",
+            f"Reason: {failure_reason}",
+            f"Evidence: {failure_evidence}" if failure_evidence else "",
             "",
             f"Commit: {sha}" + (f"  ({commit_url})" if commit_url else ""),
             f"Workflow run (logs + test-report artifacts): {run_url}" if run_url else "",
             f"Parent work item: AB#{parent_id}" if parent_id else "",
             "",
-            "Please open the workflow run above, review the failing scenarios in the "
-            "uploaded test report, and either fix the code or update the affected tests.",
+            "Please open the workflow run above, review the evidence, and either fix the "
+            "code, update tests, or refine acceptance criteria in the parent ADO item.",
         ] if line != "" or True  # keep blank separators
     )
 
@@ -94,9 +109,13 @@ def main() -> int:
         # on it instead of creating another (repeated pushes / re-runs / develop+main).
         existing = find_open_regression_child(org_url=org, project=project, pat=pat, parent_id=parent_id)
         if existing:
-            note = (("HIGH severity: " if is_high_severity else "") + f"Regression failed again for {component}.\n"
-                    f"Commit: {sha}" + (f"  ({commit_url})" if commit_url else "") + "\n"
-                    + (f"Workflow run: {run_url}" if run_url else ""))
+            note = (("HIGH severity: " if is_high_severity else "")
+                + (f"ADO gate failed again for {component}.\n" if failure_reason in ado_gate_reasons
+                   else f"Regression failed again for {component}.\n")
+                + f"Reason: {failure_reason}\n"
+                + (f"Evidence: {failure_evidence}\n" if failure_evidence else "")
+                + f"Commit: {sha}" + (f"  ({commit_url})" if commit_url else "") + "\n"
+                + (f"Workflow run: {run_url}" if run_url else ""))
             ok = add_comment(org_url=org, project=project, pat=pat, work_item_id=existing, text=note)
             print(f"Regression subtask #{existing} already open under AB#{parent_id} — "
                   f"{'commented the new failure' if ok else 'comment failed'} instead of creating a duplicate.")

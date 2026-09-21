@@ -37,21 +37,180 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ADO-first gate: verify the parent ticket has required details and that
+      # acceptance criteria have keyword coverage in the current UI code diff.
+      - name: ADO source-of-truth precheck
+        id: ado_gate
+        working-directory: testgen-agent
+        env:
+          AZDO_ORG_URL: ${{ secrets.AZDO_ORG_URL }}
+          AZDO_PROJECT: ${{ secrets.AZDO_PROJECT }}
+          AZDO_PAT: ${{ secrets.AZDO_PAT }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import subprocess
+          import sys
+
+          sys.path.insert(0, os.path.join(os.getcwd(), "testgen"))
+          from ado import (  # noqa: E402
+              criteria_coverage_report,
+              extract_work_item_id,
+              fetch_work_item_details,
+              validate_work_item_requirements,
+          )
+
+          def git(args):
+              try:
+                  return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout.strip()
+              except Exception:
+                  return ""
+
+          event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+          sha = os.environ.get("GITHUB_SHA", "HEAD")
+          out = os.environ.get("GITHUB_OUTPUT", "")
+
+          def set_output(key, value):
+              with open(out, "a", encoding="utf-8") as fh:
+                  fh.write(f"{key}={value}\n")
+
+          def set_multiline_output(key, value):
+              with open(out, "a", encoding="utf-8") as fh:
+                  fh.write(f"{key}<<EOF\n{value}\nEOF\n")
+
+          # Enforce ADO-first for push runs; PR/manual runs keep current behavior.
+          if event_name != "push":
+              set_output("ado_ok", "true")
+              set_output("ado_reason", "not_push")
+              set_multiline_output("ado_evidence", "ADO strict gate skipped for non-push event")
+              raise SystemExit(0)
+
+          head_message = git(["log", "-1", "--format=%B", sha])
+          work_item_id = (os.environ.get("AZDO_WORK_ITEM_ID", "").strip() or extract_work_item_id(head_message) or "")
+          if not work_item_id:
+              set_output("ado_ok", "false")
+              set_output("ado_reason", "missing_work_item_id")
+              set_multiline_output(
+                  "ado_evidence",
+                  "No AB#/ADO-/WI- id found in the commit message and AZDO_WORK_ITEM_ID is empty.",
+              )
+              raise SystemExit(0)
+
+          details = fetch_work_item_details(
+              org_url=os.environ.get("AZDO_ORG_URL", ""),
+              project=os.environ.get("AZDO_PROJECT", ""),
+              pat=os.environ.get("AZDO_PAT", ""),
+              work_item_id=work_item_id,
+          )
+          ok, reason = validate_work_item_requirements(details)
+          if not ok:
+              mapped_reason = {
+                  "missing_work_item_id": "ado_context_missing",
+                  "missing_ado_credentials": "ado_context_missing",
+                  "ado_fetch_failed": "ado_context_missing",
+                  "missing_description": "ado_acceptance_missing",
+                  "missing_acceptance_criteria": "ado_acceptance_missing",
+              }.get(reason, "ado_context_missing")
+              evidence = (
+                  f"work_item=AB#{work_item_id}; reason={reason}; error={details.error or 'n/a'}; "
+                  f"has_description={'yes' if details.description else 'no'}; "
+                  f"has_acceptance={'yes' if details.acceptance_criteria else 'no'}"
+              )
+              set_output("ado_ok", "false")
+              set_output("ado_reason", mapped_reason)
+              set_multiline_output("ado_evidence", evidence)
+              raise SystemExit(0)
+
+          changed_files = [ln for ln in git(["show", "--name-only", "--pretty=", sha]).splitlines() if ln.strip()]
+          git_diff = git(["show", "--pretty=format:", "--patch", sha])
+          coverage = criteria_coverage_report(
+              acceptance_criteria=details.acceptance_criteria,
+              git_diff=git_diff,
+              changed_files=changed_files,
+          )
+          if not coverage.get("covered"):
+              missing = coverage.get("missing") or []
+              preview = "\n".join(f"- {m}" for m in missing[:8])
+              evidence = (
+                  f"work_item=AB#{work_item_id}; {coverage.get('summary', '')}\n"
+                  f"Changed files:\n" + "\n".join(f"- {p}" for p in changed_files[:40])
+              )
+              if preview:
+                  evidence += "\nMissing criteria:\n" + preview
+              set_output("ado_ok", "false")
+              set_output("ado_reason", "ado_criteria_mismatch")
+              set_multiline_output("ado_evidence", evidence)
+              raise SystemExit(0)
+
+          set_output("ado_ok", "true")
+          set_output("ado_reason", "ok")
+          set_multiline_output("ado_evidence", f"work_item=AB#{work_item_id}; {coverage.get('summary', '')}")
+          PY
+
       - uses: actions/setup-node@v4
+        if: steps.ado_gate.outputs.ado_ok == 'true'
         with:
           node-version: '20'
 
       - name: Install dependencies
+        if: steps.ado_gate.outputs.ado_ok == 'true'
         working-directory: ${{ env.TESTGEN_UI_COMPONENT_DIR }}
         run: npm install
 
       - name: Install Playwright browser
+        if: steps.ado_gate.outputs.ado_ok == 'true'
         working-directory: ${{ env.TESTGEN_UI_COMPONENT_DIR }}
         run: npx playwright install --with-deps chromium
 
       - name: Run UI regression suite
+        id: ui_tests
+        if: steps.ado_gate.outputs.ado_ok == 'true'
+        continue-on-error: true
         working-directory: ${{ env.TESTGEN_UI_COMPONENT_DIR }}
-        run: npm test
+        run: |
+          set +e
+          npm test
+          TEST_RESULT=$?
+          set -e
+          if [ $TEST_RESULT -ne 0 ]; then
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+            echo "::error::UI regression tests failed"
+            exit 0
+          fi
+          echo "failed=false" >> "$GITHUB_OUTPUT"
+
+      - name: Log ADO subtask on ADO gate failure
+        if: ${{ github.event_name == 'push' && steps.ado_gate.outputs.ado_ok != 'true' }}
+        working-directory: testgen-agent
+        env:
+          AZDO_ORG_URL: ${{ secrets.AZDO_ORG_URL }}
+          AZDO_PROJECT: ${{ secrets.AZDO_PROJECT }}
+          AZDO_PAT: ${{ secrets.AZDO_PAT }}
+          REGRESSION_FAILURE_REASON: ${{ steps.ado_gate.outputs.ado_reason }}
+          REGRESSION_FAILURE_EVIDENCE: ${{ steps.ado_gate.outputs.ado_evidence }}
+          FAILING_COMPONENT: UI ADO precheck gate
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: python3 report_regression_failure.py
+
+      - name: Log ADO subtask on UI regression failure
+        if: ${{ github.event_name == 'push' && steps.ado_gate.outputs.ado_ok == 'true' && steps.ui_tests.outputs.failed == 'true' }}
+        working-directory: testgen-agent
+        env:
+          AZDO_ORG_URL: ${{ secrets.AZDO_ORG_URL }}
+          AZDO_PROJECT: ${{ secrets.AZDO_PROJECT }}
+          AZDO_PAT: ${{ secrets.AZDO_PAT }}
+          REGRESSION_FAILURE_REASON: test_execution_failure
+          FAILING_COMPONENT: ${{ env.TESTGEN_UI_COMPONENT_DIR }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: python3 report_regression_failure.py
 
       - name: Upload test report
         if: always()
@@ -60,3 +219,13 @@ jobs:
           name: ui-test-report
           path: ${{ env.TESTGEN_UI_COMPONENT_DIR }}/reports/
           if-no-files-found: ignore
+
+      - name: Finalize UI regression status
+        if: ${{ always() && (steps.ado_gate.outputs.ado_ok != 'true' || steps.ui_tests.outputs.failed == 'true') }}
+        run: |
+          if [ "${{ steps.ado_gate.outputs.ado_ok }}" != "true" ]; then
+            echo "::error::ADO source-of-truth gate failed: ${{ steps.ado_gate.outputs.ado_reason }}"
+          else
+            echo "::error::UI regression tests failed."
+          fi
+          exit 1
