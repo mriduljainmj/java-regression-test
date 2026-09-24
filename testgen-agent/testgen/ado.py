@@ -180,9 +180,15 @@ def validate_work_item_requirements(details: AdoWorkItemDetails) -> tuple[bool, 
         return False, "ado_fetch_failed"
     if not details.description:
         return False, "missing_description"
-    if not details.acceptance_criteria:
-        return False, "missing_acceptance_criteria"
     return True, "ok"
+
+
+def criteria_source_text(details: AdoWorkItemDetails) -> str:
+    """Return the preferred source text for coverage matching.
+
+    Acceptance Criteria is optional. When it is missing, fall back to Description.
+    """
+    return details.acceptance_criteria or details.description
 
 
 def extract_acceptance_items(text: str, *, max_items: int = 30) -> list[str]:

@@ -56,6 +56,7 @@ jobs:
 
           sys.path.insert(0, os.path.join(os.getcwd(), "testgen"))
           from ado import (  # noqa: E402
+              criteria_source_text,
               criteria_coverage_report,
               extract_work_item_id,
               fetch_work_item_details,
@@ -111,7 +112,6 @@ jobs:
                   "missing_ado_credentials": "ado_context_missing",
                   "ado_fetch_failed": "ado_context_missing",
                   "missing_description": "ado_acceptance_missing",
-                  "missing_acceptance_criteria": "ado_acceptance_missing",
               }.get(reason, "ado_context_missing")
               evidence = (
                   f"work_item=AB#{work_item_id}; reason={reason}; error={details.error or 'n/a'}; "
@@ -126,7 +126,7 @@ jobs:
           changed_files = [ln for ln in git(["show", "--name-only", "--pretty=", sha]).splitlines() if ln.strip()]
           git_diff = git(["show", "--pretty=format:", "--patch", sha])
           coverage = criteria_coverage_report(
-              acceptance_criteria=details.acceptance_criteria,
+              acceptance_criteria=criteria_source_text(details),
               git_diff=git_diff,
               changed_files=changed_files,
           )
