@@ -637,10 +637,10 @@ Scenario: Calculate discount for bulk purchase
 ```yaml
 # Required for test generation
 OPENROUTER_API_KEY: sk-or-...
-TESTGEN_MODEL: anthropic/claude-3.5-sonnet (or openai/gpt-oss-120b:free)
+TESTGEN_MODEL: google/gemma-4-31b-it:free
 
 # Optional overrides
-TESTGEN_MODELS: claude-3.5,gpt-4o,gemma-free # fallback chain
+TESTGEN_MODELS: google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free,qwen/qwen3.8-27b:free,cohere/north-mini-code:free
 TESTGEN_MAX_ATTEMPTS: 3
 TESTGEN_MAX_CONTEXT_CHARS: 60000
 ```

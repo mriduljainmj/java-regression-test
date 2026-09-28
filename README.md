@@ -179,8 +179,8 @@ dotnet test dotnet-component/BP.Tests.csproj
 | Variable | Default | What it does |
 |---|---|---|
 | `OPENROUTER_API_KEY` | — | **Required.** Your OpenRouter key |
-| `TESTGEN_MODEL` | `openai/gpt-oss-120b:free` | First model to try |
-| `TESTGEN_MODELS` | — | Comma-separated list to replace the whole fallback chain |
+| `TESTGEN_MODEL` | `google/gemma-4-31b-it:free` | First model to try |
+| `TESTGEN_MODELS` | — | Comma-separated list to replace the whole free fallback chain |
 | `TESTGEN_MODEL_RETRIES` | `3` | How many full passes over the model list before giving up |
 | `TESTGEN_MAX_ATTEMPTS` | `6` | Safety cap on generate→validate retries |
 | `TESTGEN_MAX_TEST_ATTEMPTS` | `3` | How many times to rerun-and-fix after a test failure |

@@ -73,16 +73,20 @@ BACKOFF_SCHEDULE = [
     if v.strip()
 ]
 
-# Model selection: use explicit TESTGEN_MODELS when provided, otherwise keep the
-# existing free-pool fallback chain with TESTGEN_MODEL as first preference.
-if os.environ.get("TESTGEN_MODELS"):
-    MODELS = [m.strip() for m in os.environ["TESTGEN_MODELS"].split(",") if m.strip()]
-else:
-    MODELS = [
-        os.environ.get("TESTGEN_MODEL", "openai/gpt-oss-120b:free"),
-        "openai/gpt-oss-20b:free",
+def _load_models() -> list[str]:
+    # Preserve the original "try a free fallback chain" behavior, but populate it
+    # with current free slugs that OpenRouter's models API advertises.
+    if os.environ.get("TESTGEN_MODELS"):
+        return [m.strip() for m in os.environ["TESTGEN_MODELS"].split(",") if m.strip()]
+    return [
+        os.environ.get("TESTGEN_MODEL", "google/gemma-4-31b-it:free"),
         "google/gemma-4-26b-a4b-it:free",
+        "qwen/qwen3.8-27b:free",
+        "cohere/north-mini-code:free",
     ]
+
+
+MODELS = _load_models()
 
 # Java paths are scoped to COMPONENT_DIR (not bare "src/main/java" anywhere in the
 # repo) so this agent can be dropped into a real repo that has other, unrelated
