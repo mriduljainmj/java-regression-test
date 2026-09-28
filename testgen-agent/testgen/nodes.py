@@ -1244,6 +1244,13 @@ def write_features(state: TestGenState) -> TestGenState:
     return {"written_files": written}
 
 
+def _generation_has_candidate_outputs(state: TestGenState) -> bool:
+    generation = state.get("generation")
+    if generation is None:
+        return False
+    return bool(generation.new_or_modified_features or generation.new_or_modified_step_definitions)
+
+
 def _extract_compile_errors(mvn_output: str) -> list:
     """Pull Java compiler errors out of mvn output (build failed before tests)."""
     errors = []
@@ -1343,6 +1350,11 @@ def run_generated_tests(state: TestGenState) -> TestGenState:
     repo = Path(state["repo_path"]).resolve()
 
     if not state.get("written_files"):
+        if _generation_has_candidate_outputs(state):
+            raise RuntimeError(
+                "Generation proposed test updates, but every emitted file was identical to what is already on disk. "
+                "Refuse to treat that as success because the source diff appears test-relevant while no regression files changed."
+            )
         return {"tests_passed": True, "test_failures": [],
                 "test_report": "no files written; nothing to run"}
 

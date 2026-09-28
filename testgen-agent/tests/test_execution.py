@@ -9,7 +9,9 @@ from testgen.nodes import (
     COMPONENT_DIR,
     _extract_compile_errors,
     _extract_scenario_failures,
+    run_generated_tests,
 )
+from testgen.state import FeatureFile, GenerationResult
 
 
 class CompileErrorTest(unittest.TestCase):
@@ -86,6 +88,36 @@ class ScenarioFailureTest(unittest.TestCase):
         # No report was written (compile failed before tests ran, say).
         self.assertFalse(self.report.exists())
         self.assertEqual(_extract_scenario_failures(self.repo), [])
+
+
+class NoOpGenerationFailureTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_candidate_outputs_with_no_written_files_raise(self):
+        state = {
+            "repo_path": str(self.repo),
+            "project_type": "dotnet",
+            "written_files": [],
+            "generation": GenerationResult(
+                impacted_endpoints=["GET /api/discount-policy"],
+                analysis_summary="discount percent changed",
+                new_or_modified_features=[FeatureFile(
+                    file_name="dotnet-component/Tests/Features/pricing_orchestration.feature",
+                    action="UPDATE",
+                    gherkin_content="Feature: Pricing orchestration\n  Scenario: S\n    Given x\n",
+                )],
+            ),
+        }
+
+        with self.assertRaises(RuntimeError) as ctx:
+            run_generated_tests(state)
+
+        self.assertIn("identical to what is already on disk", str(ctx.exception))
 
 
 if __name__ == "__main__":
