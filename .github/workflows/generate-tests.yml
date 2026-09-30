@@ -207,7 +207,7 @@ jobs:
               raise SystemExit(1)
 
             print(f"ADO precheck passed for AB#{work_item_id}: {coverage.get('summary', '')}")
-            PY
+          PY
           }
 
           # ---- .NET ----
