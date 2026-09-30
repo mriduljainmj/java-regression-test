@@ -34,6 +34,21 @@ namespace BP.Tests.StepDefinitions
             _scenarioContext["response"] = response;
         }
 
+        [When(@"^a client requests the discount policy for quantity (-?\d+) and loyalty (true|false)$")]
+        public async Task WhenAClientRequestsTheDiscountPolicyForQuantityAndLoyalty(int quantity, string loyalty)
+        {
+            var response = await _httpClient.GetAsync($"/api/discount-policy?quantity={quantity}&isLoyaltyMember={loyalty}");
+            _scenarioContext["response"] = response;
+        }
+
+        [When(@"^a client submits an order total request with body$")]
+        public async Task WhenAClientSubmitsAnOrderTotalRequestWithBody(string body)
+        {
+            var content = new StringContent(body, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("/api/order-total-from-policy", content);
+            _scenarioContext["response"] = response;
+        }
+
         [Then(@"^the response JSON should contain decimal ""([^""]+)"": ([0-9]+(?:\.[0-9]+)?)$")]
         public async Task ThenTheResponseJsonShouldContainDecimalField(string key, decimal expected)
         {
