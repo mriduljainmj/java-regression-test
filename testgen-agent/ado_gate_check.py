@@ -58,6 +58,7 @@ def main() -> int:
         acceptance_criteria=criteria_source_text(details),
         git_diff=git_diff,
         changed_files=changed_files,
+        repo_root=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     )
     if not coverage.get("covered"):
         print(f"ADO precheck failed for AB#{work_item_id}: {coverage.get('summary', '')}")

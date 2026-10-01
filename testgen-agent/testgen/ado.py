@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import html
 import json
+from pathlib import Path
 import re
 import urllib.error
 import urllib.request
@@ -225,11 +226,33 @@ def _criterion_tokens(text: str) -> list[str]:
 
 
 def criteria_coverage_report(
-    *, acceptance_criteria: str, git_diff: str, changed_files: list[str]
+    *, acceptance_criteria: str, git_diff: str, changed_files: list[str], repo_root: str | None = None
 ) -> dict:
-    """Heuristic coverage report: do criteria keywords appear in changed code context?"""
+    """Heuristic coverage report: do criteria keywords appear in changed code context?
+
+    Matching against the diff alone is too narrow for small edits such as a single
+    loyalty-discount change in a controller. When available, include the full text
+    of changed files so acceptance-criteria terms that remain unchanged in the file
+    can still be used as coverage evidence.
+    """
     criteria = extract_acceptance_items(acceptance_criteria)
-    haystack = (git_diff or "").lower() + "\n" + "\n".join(changed_files or []).lower()
+    file_contents: list[str] = []
+    root = Path(repo_root).resolve() if repo_root else None
+    for changed_file in changed_files or []:
+        candidate = Path(changed_file)
+        if root and not candidate.is_absolute():
+            candidate = root / candidate
+        try:
+            if candidate.is_file():
+                file_contents.append(candidate.read_text(encoding="utf-8", errors="ignore"))
+        except Exception:
+            continue
+
+    haystack = "\n".join([
+        (git_diff or "").lower(),
+        "\n".join(changed_files or []).lower(),
+        "\n".join(file_contents).lower(),
+    ])
     matched: list[str] = []
     missing: list[str] = []
 
